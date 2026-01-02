@@ -201,7 +201,7 @@ function syslog_partition_create($table) {
 		FROM `information_schema`.`partitions`
         WHERE table_schema='" . $syslogdb_default . "'
 		AND partition_name='" . $cformat . "'
-		AND table_name='syslog'
+		AND table_name='$table'
         ORDER BY partition_ordinal_position");
 
 	if (!cacti_sizeof($exists)) {
@@ -224,7 +224,7 @@ function syslog_partition_remove($table) {
 	$syslog_deleted = 0;
 	$number_of_partitions = syslog_db_fetch_assoc("SELECT *
 		FROM `information_schema`.`partitions`
-		WHERE table_schema='" . $syslogdb_default . "' AND table_name='syslog'
+		WHERE table_schema='" . $syslogdb_default . "' AND table_name='$table'
 		ORDER BY partition_ordinal_position");
 
 	$days = read_config_option('syslog_retention');
@@ -264,7 +264,7 @@ function syslog_partition_check($table) {
 	/* find date of last partition */
 	$last_part = syslog_db_fetch_cell("SELECT PARTITION_NAME
 		FROM `information_schema`.`partitions`
-		WHERE table_schema='" . $syslogdb_default . "' AND table_name='syslog'
+		WHERE table_schema='" . $syslogdb_default . "' AND table_name='$table'
 		ORDER BY partition_ordinal_position DESC
 		LIMIT 1,1;");
 

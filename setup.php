@@ -1144,6 +1144,12 @@ function syslog_config_settings() {
 			'method' => 'checkbox',
 			'default' => ''
 		),
+		'syslog_use_cacti_hosts' => array(
+			'friendly_name' => __('Resolve Syslog Hostname to Cacti Host Description', 'syslog'),
+			'description' => __('If this checkbox is set, syslog will attempt to resolve the syslog hostname to a Cacti Host Description.  This is useful when you have multiple hosts sending syslog messages with the same hostname, but different IP addresses.  By resolving to the Cacti Host Description, you can differentiate between these hosts.', 'syslog'),
+			'method' => 'checkbox',
+			'default' => ''
+		),
 		'syslog_refresh' => array(
 			'friendly_name' => __('Refresh Interval', 'syslog'),
 			'description' => __('This is the time in seconds before the page refreshes.', 'syslog'),

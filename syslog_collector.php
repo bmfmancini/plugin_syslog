@@ -204,7 +204,7 @@ while (true) {
 
 
 /**
- * parse_syslog_message - parses a raw syslog message into components per RFC 5424
+ * parse_syslog_message - parses a raw syslog message into components per RFC 3164
  *
  * @param string $raw - raw syslog message data
  * @param string $peer - peer address (source IP)
@@ -218,45 +218,40 @@ function parse_syslog_message($raw, $peer, $logtime) {
     $host = null;
     $message = $raw;
 
-    // Extract PRI (facility and priority) per RFC 5424
-    // Format: <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [STRUCTURED-DATA] MSG
+    // Extract PRI (facility and priority) per RFC 3164
+    // Format: <PRI>TIMESTAMP HOSTNAME TAG: MSG
+    // where PRI = facility * 8 + priority
     if (preg_match('/^<(\d+)>(.*)$/s', $raw, $m)) {
         $pri = intval($m[1]);
         $facility = intdiv($pri, 8);
         $priority = $pri % 8;
-        $remainder = $m[2];
+        $remainder = trim($m[2]);
 
-        // Parse RFC 5424 format: VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [SD] MSG
-        // Split on whitespace, handling structured data specially
-        if (preg_match('/^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$/s', $remainder, $parts)) {
-            // $parts[1] = VERSION (usually "1")
-            // $parts[2] = TIMESTAMP
-            // $parts[3] = HOSTNAME
-            // $parts[4] = APP-NAME
-            // $parts[5] = PROCID
-            // $parts[6] = MSGID
-            // $parts[7] = [STRUCTURED-DATA] MSG or just MSG
+        // RFC 3164: TIMESTAMP HOSTNAME TAG: MSG
+        // TIMESTAMP is typically: Mmm dd hh:mm:ss (e.g., "Jan 11 10:30:45")
+        // After PRI, skip timestamp (3 tokens: month day time) and extract HOSTNAME TAG: MSG
+        if (preg_match('/^(?:\S+\s+\S+\s+\S+\s+)?(\S+)\s+(.+)$/s', $remainder, $parts)) {
+            // $parts[1] could be HOSTNAME
+            // $parts[2] is TAG: MSG
             
-            $hostname = ($parts[3] !== '-') ? $parts[3] : null;
-            $program = ($parts[4] !== '-') ? $parts[4] : 'syslog';
-            
-            // Remove structured data if present and extract MSG
-            $msg_part = $parts[7];
-            if (preg_match('/^\[.*?\]\s*(.*)$/s', $msg_part, $msg_match)) {
-                // Has structured data, extract MSG after it
-                $message = $msg_match[1];
+            // Extract TAG and MSG - TAG ends at first colon
+            // RFC 3164: TAG is alphanumeric with optional [pid], max 32 chars
+            // Handle Cisco format with optional % prefix: %FACILITY-SEVERITY-MNEMONIC:
+            if (preg_match('/^%?([a-zA-Z0-9_\.\-]+)(?:\[\d+\])?:\s*(.*)$/s', $parts[2], $tag_msg)) {
+                $program = $tag_msg[1];
+                $message = $tag_msg[2];
             } else {
-                // No structured data, or '-' for nil
-                $message = ($msg_part !== '-') ? $msg_part : '';
+                // No valid TAG found, treat entire remainder as message
+                $message = $parts[2];
             }
         } else {
-            // Not RFC 5424 format, treat as plain message
-            $message = trim($remainder);
+            // Couldn't parse RFC 3164 format, use entire remainder as message
+            $message = $remainder;
         }
     }
 
-    // Use peer address as host if not extracted from message
-    if (empty($host) && !empty($peer)) {
+    // Use peer address as host (most reliable per RFC 3164 section 6.2.4)
+    if (!empty($peer)) {
         $peer_addr = preg_replace('/^[a-z]+:\/\//i', '', $peer);
         if (preg_match('/^\[?([^\]]+)\]?:\d+$/', $peer_addr, $pm)) {
             $host = $pm[1];
@@ -271,9 +266,6 @@ function parse_syslog_message($raw, $peer, $logtime) {
     }
     if (empty($program)) {
         $program = 'syslog';
-    }
-    if (empty($message)) {
-        $message = '';
     }
 
     return array(

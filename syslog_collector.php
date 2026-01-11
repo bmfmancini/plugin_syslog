@@ -38,6 +38,15 @@ $port = read_config_option('syslog_collector_port') ?: 514;
 $interface = read_config_option('syslog_collector_interface') ?: '0.0.0.0';
 $debug = false;
 
+
+$batch_size = 100;        // Number of messages to buffer before bulk insert
+$flush_interval = 5;      // Seconds between forced flushes
+$message_buffer = array();
+$last_flush_time = time();
+$stats_messages_received = 0;
+$stats_messages_inserted = 0;
+$stats_last_report = time();
+
 ini_set('memory_limit', '-1');
 set_time_limit(0);
 
@@ -73,6 +82,18 @@ if (cacti_sizeof($parms)) {
 			case '-i':
 				if (!empty($value)) {
 					$interface = $value;
+				}
+				break;
+			case '--batch-size':
+			case '-b':
+				if (intval($value) > 0) {
+					$batch_size = intval($value);
+				}
+				break;
+			case '--flush-interval':
+			case '-f':
+				if (intval($value) > 0) {
+					$flush_interval = intval($value);
 				}
 				break;
 			case '--version':
@@ -120,27 +141,80 @@ if (!$sock) {
 }
 
 echo "Syslog Receiver is now listening and ready to accept messages\n";
-cacti_log("Syslog Receiver is now listening and ready to accept messages", false, 'syslog');
+cacti_log("Syslog Receiver ready - Batch size: {$batch_size}, Flush interval: {$flush_interval}s", false, 'syslog');
 
 while (true) {
     $peer = null;
     $data = @stream_socket_recvfrom($sock, 8192, 0, $peer);
+    
+    // Check if we should flush based on time interval
+    $current_time = time();
+    if (($current_time - $last_flush_time) >= $flush_interval && count($message_buffer) > 0) {
+        flush_message_buffer($message_buffer, $stats_messages_inserted, $debug);
+        $last_flush_time = $current_time;
+    }
+    
+    // Report statistics every 60 seconds
+    if (($current_time - $stats_last_report) >= 60) {
+        $rate = $stats_messages_received / 60;
+        echo sprintf("Stats: Received=%d, Inserted=%d, Rate=%.1f msg/sec\n", 
+            $stats_messages_received, $stats_messages_inserted, $rate);
+        cacti_log(sprintf("Stats: Received=%d, Inserted=%d, Rate=%.1f msg/sec", 
+            $stats_messages_received, $stats_messages_inserted, $rate), false, 'syslog');
+        $stats_messages_received = 0;
+        $stats_messages_inserted = 0;
+        $stats_last_report = $current_time;
+    }
+    
     if ($data === false || $data === '') {
-        usleep(100000);
+        usleep(10000);
         continue;
     }
 
     $raw = trim($data);
     $logtime = date('Y-m-d H:i:s');
+
+    if ($debug) {
+        echo "RAW: " . substr($raw, 0, 500) . "\n";
+    }
+
+    // Parse the syslog message
+    $parsed = parse_syslog_message($raw, $peer, $logtime);
+
+    // Add message to buffer instead of immediate insert
+    $message_buffer[] = $parsed;
+    
+    $stats_messages_received++;
+    
+    if ($debug) {
+        echo "[{$parsed['logtime']}] From={$parsed['host']} Prog={$parsed['program']} Fac=" . var_export($parsed['facility_id'], true) . 
+             " Pri=" . var_export($parsed['priority_id'], true) . " Msg=" . substr($parsed['message'], 0, 200) . 
+             " [Buffered: " . count($message_buffer) . "]\n";
+    }
+    
+    // Flush buffer when batch size is reached
+    if (count($message_buffer) >= $batch_size) {
+        flush_message_buffer($message_buffer, $stats_messages_inserted, $debug);
+        $last_flush_time = time();
+    }
+}
+
+
+
+/**
+ * parse_syslog_message - parses a raw syslog message into components
+ *
+ * @param string $raw - raw syslog message data
+ * @param string $peer - peer address (source IP)
+ * @param string $logtime - timestamp for the message
+ * @return array - parsed message components
+ */
+function parse_syslog_message($raw, $peer, $logtime) {
     $facility = null;
     $priority = null;
     $program = 'syslog';
     $host = null;
     $message = $raw;
-
-    if ($debug) {
-        echo "RAW: " . substr($raw,0,500) . "\n";
-    }
 
     // Extract PRI (facility and priority) per RFC 3164/5424
     // Format: <PRI>remainder where PRI = facility * 8 + priority
@@ -178,28 +252,74 @@ while (true) {
         $program = 'syslog';
     }
 
-
-    global $syslogdb_default;
-    
-    $sql = "INSERT INTO `{$syslogdb_default}`.`syslog_incoming` " .
-        '(facility_id, priority_id, program, logtime, host, message, status) ' .
-        'VALUES (?, ?, ?, ?, ?, ?, 0)';
-    $params = [$facility, $priority, $program, $logtime, $host, $message];
-
-    try {
-        $insert_successful = syslog_db_execute_prepared($sql, $params);
-        if ($debug) {
-            echo "[{$logtime}] From={$host} Prog={$program} Fac=" . var_export($facility, true) . " Pri=" . var_export($priority, true) . " Msg=" . substr($message, 0, 200) . "\n";
-        }
-    } catch (Exception $e) {
-        cacti_log("ERROR: Failed to insert syslog message: " . $e->getMessage(), false, 'syslog');
-        if ($debug) {
-            echo "ERROR: Failed to insert syslog message: " . $e->getMessage() . "\n";
-        }
-    }
+    return array(
+        'facility_id' => $facility,
+        'priority_id' => $priority,
+        'program' => $program,
+        'logtime' => $logtime,
+        'host' => $host,
+        'message' => $message
+    );
 }
 
-
+/**
+ * flush_message_buffer - performs bulk insert of buffered messages
+ *
+ * @param array &$buffer - reference to message buffer array
+ * @param int &$stats_inserted - reference to stats counter
+ * @param bool $debug - debug mode flag
+ * @return (void)
+ */
+function flush_message_buffer(&$buffer, &$stats_inserted, $debug = false) {
+    global $syslogdb_default;
+    
+    if (empty($buffer)) {
+        return;
+    }
+    
+    $count = count($buffer);
+    $start_time = microtime(true);
+    
+    try {
+        // Build bulk INSERT statement
+        $sql = "INSERT INTO `{$syslogdb_default}`.`syslog_incoming` " .
+               '(facility_id, priority_id, program, logtime, host, message, status) VALUES ';
+        
+        $value_placeholders = array();
+        $all_params = array();
+        
+        foreach ($buffer as $msg) {
+            $value_placeholders[] = '(?, ?, ?, ?, ?, ?, 0)';
+            $all_params[] = $msg['facility_id'];
+            $all_params[] = $msg['priority_id'];
+            $all_params[] = $msg['program'];
+            $all_params[] = $msg['logtime'];
+            $all_params[] = $msg['host'];
+            $all_params[] = $msg['message'];
+        }
+        
+        $sql .= implode(', ', $value_placeholders);
+        
+        syslog_db_execute_prepared($sql, $all_params);
+        
+        $elapsed = microtime(true) - $start_time;
+        $stats_inserted += $count;
+        
+        if ($debug) {
+            echo sprintf("FLUSH: Inserted %d messages in %.3f seconds (%.1f msg/sec)\n", 
+                $count, $elapsed, $count / $elapsed);
+        }
+        
+    } catch (Exception $e) {
+        cacti_log("ERROR: Failed to flush message buffer ({$count} messages): " . $e->getMessage(), false, 'syslog');
+        if ($debug) {
+            echo "ERROR: Failed to flush buffer: " . $e->getMessage() . "\n";
+        }
+    }
+    
+    // Clear the buffer
+    $buffer = array();
+}
 
 /**
  * display_help - displays help information
@@ -210,13 +330,15 @@ function display_help() {
 	display_version();
 
 	print 'The Syslog collector process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
-	print 'usage: syslog_collector.php [--port=PORT] [--interface=IP] [--debug]' . PHP_EOL . PHP_EOL;
+	print 'usage: syslog_collector.php [options]' . PHP_EOL . PHP_EOL;
 	print 'options:' . PHP_EOL;
-	print '  --port=PORT        Port number to listen on (default: 514).' . PHP_EOL;
-	print '  --interface=IP     Interface IP to bind to (default: 0.0.0.0).' . PHP_EOL;
-	print '  --debug            Provide more verbose debug output.' . PHP_EOL;
-	print '  --version|-v       Display version information.' . PHP_EOL;
-	print '  --help|-h          Display this help message.' . PHP_EOL . PHP_EOL;
+	print '  --port=PORT           Port number to listen on (default: 514).' . PHP_EOL;
+	print '  --interface=IP        Interface IP to bind to (default: 0.0.0.0).' . PHP_EOL;
+	print '  --batch-size=N        Number of messages to buffer before insert (default: 100).' . PHP_EOL;
+	print '  --flush-interval=SEC  Seconds between forced buffer flushes (default: 5).' . PHP_EOL;
+	print '  --debug               Provide more verbose debug output.' . PHP_EOL;
+	print '  --version|-v          Display version information.' . PHP_EOL;
+	print '  --help|-h             Display this help message.' . PHP_EOL . PHP_EOL;
 }
 
 

@@ -122,7 +122,7 @@ while (true) {
     $logtime = date('Y-m-d H:i:s');
     $facility = null;
     $priority = null;
-    $program = null;
+    $program = 'syslog';
     $host = null;
     $message = $raw;
 
@@ -130,7 +130,8 @@ while (true) {
         echo "RAW: " . substr($raw,0,500) . "\n";
     }
 
-    // Extract PRI first (RFC3164/5424 start with <PRI>)
+    // Extract PRI (facility and priority) per RFC 3164/5424
+    // Format: <PRI>remainder where PRI = facility * 8 + priority
     if (preg_match('/^<(\d+)>(.*)$/s', $raw, $m)) {
         $pri = intval($m[1]);
         $facility = intdiv($pri, 8);
@@ -138,88 +139,31 @@ while (true) {
         $message = trim($m[2]);
     }
 
-    // Strip leading structured-data blocks (RFC5424) immediately so they
-    // don't confuse subsequent parsing (e.g. become part of program).
-    $message = preg_replace('/^(?:\[[^\]]*\]\s*)+/', '', $message);
-
-    // If message starts with ISO8601 timestamp, extract it as logtime and
-    // remove it from the message body early to avoid it being parsed as
-    // program or hostname later.
-    if (preg_match('/^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+\-]\d{2}:?\d{2})?)\s+(?P<rest>.+)$/s', $message, $im)) {
-        try {
-            $dt = new DateTime($im['ts']);
-            $logtime = $dt->format('Y-m-d H:i:s');
-        } catch (Exception $e) {
-        }
-        $message = $im['rest'];
-
-        // If remaining text starts with "host prog ...", try to pull them
-        if (preg_match('/^(?P<host>[\w.\-]+)\s+(?P<prog>[\w\-]+)\s+(?P<restmsg>.*)$/s', $message, $rm)) {
-            if (empty($host)) {
-                $host = $rm['host'];
-            }
-            if (empty($program)) {
-                $program = $rm['prog'];
-            }
-            $message = $rm['restmsg'];
-        }
+    // Try to extract program name from standard RFC format: "program:" or "program[pid]:"
+    // This is the TAG field per RFC 3164 - alphanumeric with optional [pid]
+    if (preg_match('/^(?:\S+\s+\S+\s+\S+\s+)?(?:\S+\s+)?([a-zA-Z0-9_\-\.]+)(?:\[\d+\])?:\s*(.*)$/s', $message, $m)) {
+        $program = $m[1];
+        // Don't modify $message - keep it as the full payload after PRI
+    } else {
+        $program = 'syslog';
     }
 
-    // Try RFC5424: "VERSION TIMESTAMP HOST APP-NAME PROCID MSGID [SD] MSG"
-    if (preg_match('/^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(?:\[([^\]]*)\]\s*)?(.*)$/s', $message, $m)) {
-        // $m: version, timestamp, hostname, app-name, procid, structured-data (opt), msg
-        $timestamp = $m[2];
-        $host = $m[3];
-        $program = $m[4];
-        $message = isset($m[7]) ? trim($m[7]) : '';
-
-        // try to parse timestamp into MySQL format
-        try {
-            $dt = new DateTime($timestamp);
-            $logtime = $dt->format('Y-m-d H:i:s');
-        } catch (Exception $e) {
-            // leave $logtime as now
-        }
-    } 
-    // Try Cisco format: "SEQ: TIMESTAMP: %FACILITY-SEVERITY-MNEMONIC: Description"
-    else if (preg_match('/^(?:\d+:\s+)?(?:[^:]+:\s+)?%(?P<fac>[A-Z0-9_]+)-(?P<sev>\d+)-(?P<mnem>[A-Z0-9_]+):\s*(?P<msg>.*)$/s', $message, $m)) {
-        $program = $m['fac'] . '-' . $m['mnem'];
-        $message = trim($m['msg']);
-    }
-    // Try RFC3164: "Mmm dd hh:mm:ss host program: msg"
-    else if (preg_match('/^[A-Za-z]{3}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+(?P<host>[\w.\-]+)\s+(?P<prog>[^:]+):\s*(?P<msg>.*)$/s', $message, $m)) {
-        $host = $m['host'];
-        $program = trim($m['prog']);
-        $message = trim($m['msg']);
-    } else if (preg_match('/^(?P<host>[\w.\-]+)\s+(?P<prog>[^:]+):\s*(?P<msg>.*)$/s', $message, $m)) {
-        // fallback: host prog: msg
-        $host = $m['host'];
-        $program = trim($m['prog']);
-        $message = trim($m['msg']);
-    }
-
-    // (stripping and ISO8601 extraction already performed earlier)
-
-    // fallback to peer IP for host
-    if (empty($host) && !empty($peer)) {
-        // Remove scheme if present (e.g., "udp://")
+    // Host is always the source IP (peer) - this is most reliable per RFC
+    if (!empty($peer)) {
         $peer_addr = preg_replace('/^[a-z]+:\/\//i', '', $peer);
-        
-        // Extract IP without port: IPv6 in [brackets] or IPv4 before first colon
-        if (preg_match('/^\[([^\]]+)\]/', $peer_addr, $pm)) {
-            // IPv6 in brackets like [::1]:12345
-            $host = $pm[1];
-        } else if (preg_match('/^([^:]+)/', $peer_addr, $pm)) {
-            // IPv4 like 192.168.1.1:12345 - take everything before first colon
+        if (preg_match('/^\[?([^\]]+)\]?:\d+$/', $peer_addr, $pm)) {
             $host = $pm[1];
         } else {
-            $host = $peer_addr;
+            $host = preg_replace('/:\d+$/', '', $peer_addr);
         }
     }
 
-    // fallback program
+    // Final fallbacks
+    if (empty($host)) {
+        $host = 'unknown';
+    }
     if (empty($program)) {
-        $program = 'unknown';
+        $program = 'syslog';
     }
 
     // Prepare insert

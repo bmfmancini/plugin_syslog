@@ -115,8 +115,12 @@ $errno = 0; $errstr = '';
 $sock = @stream_socket_server($uri, $errno, $errstr, STREAM_SERVER_BIND);
 if (!$sock) {
     fwrite(STDERR, "ERROR: Failed to bind to {$uri} - {$errstr}\n");
+    cacti_log("ERROR: Failed to bind to {$uri} - {$errstr}", false, 'syslog');
     exit(1);
 }
+
+echo "Syslog Receiver is now listening and ready to accept messages\n";
+cacti_log("Syslog Receiver is now listening and ready to accept messages", false, 'syslog');
 
 while (true) {
     $peer = null;

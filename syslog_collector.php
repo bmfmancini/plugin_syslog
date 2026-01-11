@@ -180,14 +180,22 @@ while (true) {
 
 
     global $syslogdb_default;
-    $sql = 'INSERT INTO `' . $syslogdb_default . '`.`syslog_incoming` ' .
+    
+    $sql = "INSERT INTO `{$syslogdb_default}`.`syslog_incoming` " .
         '(facility_id, priority_id, program, logtime, host, message, status) ' .
         'VALUES (?, ?, ?, ?, ?, ?, 0)';
-    $params = array($facility, $priority, $program, $logtime, $host, $message);
+    $params = [$facility, $priority, $program, $logtime, $host, $message];
 
-    $ok = syslog_db_execute_prepared($sql, $params);
-    if ($debug) {
-        echo "[{$logtime}] From={$host} Prog={$program} Fac=" . var_export($facility, true) . " Pri=" . var_export($priority, true) . " Msg=" . substr($message,0,200) . "\n";
+    try {
+        $insert_successful = syslog_db_execute_prepared($sql, $params);
+        if ($debug) {
+            echo "[{$logtime}] From={$host} Prog={$program} Fac=" . var_export($facility, true) . " Pri=" . var_export($priority, true) . " Msg=" . substr($message, 0, 200) . "\n";
+        }
+    } catch (Exception $e) {
+        cacti_log("ERROR: Failed to insert syslog message: " . $e->getMessage(), false, 'syslog');
+        if ($debug) {
+            echo "ERROR: Failed to insert syslog message: " . $e->getMessage() . "\n";
+        }
     }
 }
 
@@ -201,8 +209,8 @@ while (true) {
 function display_help() {
 	display_version();
 
-	print 'The Syslog receiver process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
-	print 'usage: syslog_receiver.php [--port=PORT] [--interface=IP] [--debug]' . PHP_EOL . PHP_EOL;
+	print 'The Syslog collector process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
+	print 'usage: syslog_collector.php [--port=PORT] [--interface=IP] [--debug]' . PHP_EOL . PHP_EOL;
 	print 'options:' . PHP_EOL;
 	print '  --port=PORT        Port number to listen on (default: 514).' . PHP_EOL;
 	print '  --interface=IP     Interface IP to bind to (default: 0.0.0.0).' . PHP_EOL;

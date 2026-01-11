@@ -28,7 +28,7 @@ Type=simple
 User=root
 Group=root
 #EnvironmentFile=/etc/sysconfig/cactid
-ExecStart=/var/www/html/cacti/plugins/syslog/syslog_receiver.php
+ExecStart=/var/www/html/cacti/plugins/syslog/syslog_collector.php
 Restart=always
 RestartSec=5s
 

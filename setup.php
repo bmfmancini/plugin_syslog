@@ -1225,6 +1225,44 @@ function syslog_config_settings() {
 			'method' => 'checkbox',
 			'default' => ''
 		),
+		//add a spacer for the syslog collector settings
+		'syslog_collector_header' => array(
+			'friendly_name' => __('Syslog Collector Settings', 'syslog'),
+			'method' => 'spacer',
+		),
+		'syslog_collector_enabled' => array(
+			'friendly_name' => __('Enable Syslog Collector', 'syslog'),
+			'description' => __('If this checkbox is set, the built-in syslog collector will be enabled.  This collector can accept both UDP and TCP syslog messages.', 'syslog'),
+			'method' => 'checkbox',
+			'default' => ''
+		),
+		'syslog_collector_port' => array(
+			'friendly_name' => __('Syslog Collector Port', 'syslog'),
+			'description' => __('This is the UDP and TCP port that the built-in syslog collector will listen on for syslog messages.', 'syslog'),
+			'method' => 'textbox',
+			'default' => '514',
+			'size' => 10,
+			'max_length' => 5,
+		),
+		'syslog_collector_protocol' => array(
+			'friendly_name' => __('Syslog Collector Protocol', 'syslog'),
+			'description' => __('This is the protocol that the built-in syslog collector will use to listen for syslog messages.', 'syslog'),
+			'method' => 'drop_array',
+			'default' => 'both',
+			'array' => array(
+				'udp'  => __('UDP Only', 'syslog'),
+				'tcp'  => __('TCP Only', 'syslog'),
+				'both' => __('Both UDP and TCP', 'syslog')
+			)
+		),
+		'syslog_collector_interface' => array(
+			'friendly_name' => __('Syslog Collector Interface', 'syslog'),
+			'description' => __('This is the network interface that the built-in syslog collector will bind to for listening for syslog messages.  Leave blank to bind to all interfaces.', 'syslog'),
+			'method' => 'textbox',
+			'default' => '',
+			'size' => 30,
+			'max_length' => 45,
+		)
 	);
 
 	if (isset($settings['syslog'])) {

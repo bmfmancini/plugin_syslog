@@ -29,15 +29,23 @@ include_once(dirname(__FILE__) . '/functions.php');
 include_once(dirname(__FILE__) . '/database.php');
 syslog_connect();
 
-// defaults
+
 $opts = getopt('', array('udp::','tcp::','port::','interface::','debug','help'));
-$use_udp = true;
-$port = isset($opts['port']) && intval($opts['port']) ? intval($opts['port']) : 514;
-$interface = isset($opts['interface']) ? $opts['interface'] : '0.0.0.0';
+if (read_config_option('syslog_collector_enabled') != 'on')  {
+    echo "Syslog Receiver is disabled in settings. Exiting.\n";
+    exit(0);
+};
+
+
+
+$port = read_config_option('syslog_collector_port') ?: 514;
+$interface = read_config_option('syslog_collector_interface') ?: '0.0.0.0';
 $debug = isset($opts['debug']);
 
 ini_set('memory_limit', '-1');
 set_time_limit(0);
+
+
 
 
 
@@ -100,7 +108,22 @@ if (cacti_sizeof($parms)) {
 
 
 
+if (read_config_option('syslog_collector_port') ===  '') {
+    cacti_log('syslog_reciever.php: Syslog collector port is not set, defaulting to 514', false, 'syslog');
+    if ($debug) {
+        echo "syslog_reciever.php: Syslog collector port is not set in settings, defaulting to 514\n";
+    }
+}
+if (read_config_option('syslog_collector_interface') ===  '') {
+    cacti_log('syslog_reciever.php: Syslog collector interface is not set, defaulting to 0.0.0.0', false, 'syslog');
+    if ($debug) {
+        echo "syslog_reciever.php: Syslog collector interface is not set in settings, defaulting to 0.0.0.0\n";
+    }
+}
+
+
 echo "Starting PHP Syslog Receiver on {$interface}:{$port} (UDP)\n";
+cacti_log("Starting PHP Syslog Receiver on {$interface}:{$port} (UDP)", false, 'syslog');
 
 $uri = "udp://{$interface}:{$port}";
 $errno = 0; $errstr = '';
@@ -166,9 +189,11 @@ while (true) {
         $program = 'syslog';
     }
 
-    // Prepare insert
+
     global $syslogdb_default;
-    $sql = 'INSERT INTO `' . $syslogdb_default . '`.`syslog_incoming` (facility_id, priority_id, program, logtime, host, message, status) VALUES (?, ?, ?, ?, ?, ?, 0)';
+    $sql = 'INSERT INTO `' . $syslogdb_default . '`.`syslog_incoming` ' .
+        '(facility_id, priority_id, program, logtime, host, message, status) ' .
+        'VALUES (?, ?, ?, ?, ?, ?, 0)';
     $params = array($facility, $priority, $program, $logtime, $host, $message);
 
     $ok = syslog_db_execute_prepared($sql, $params);

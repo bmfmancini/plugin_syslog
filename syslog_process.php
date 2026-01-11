@@ -25,7 +25,6 @@
 include(dirname(__FILE__) . '/../../include/cli_check.php');
 include_once(dirname(__FILE__) . '/functions.php');
 include_once(dirname(__FILE__) . '/database.php');
-
 syslog_connect();
 
 /**
@@ -239,7 +238,25 @@ syslog_process_log($start_time, $deleted, $incoming, $removed, $xferred, $alerts
  */
 unregister_process('syslog', 'master', $config['poller_id']);
 
-exit(0);
+
+
+/**
+ * display_help - displays help information
+ *
+ * @return (void)
+ */
+function display_help() {
+	display_version();
+
+	print 'The main Syslog poller process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
+	print 'usage: syslog_process.php [--debug] [--force-report]' . PHP_EOL . PHP_EOL;
+	print 'options:' . PHP_EOL;
+	print '    --force-report   Send email reports now.' . PHP_EOL;
+	print '    --debug          Provide more verbose debug output.' . PHP_EOL . PHP_EOL;
+}
+
+
+
 
 /**
  * display_version - displays version information
@@ -257,18 +274,6 @@ function display_version() {
 	print 'Syslog Poller, Version ' . trim($version['version']) . ', ' . COPYRIGHT_YEARS . PHP_EOL;
 }
 
-/**
- * display_help - displays help information
- *
- * @return (void)
- */
-function display_help() {
-	display_version();
 
-	print 'The main Syslog poller process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
-	print 'usage: syslog_process.php [--debug] [--force-report]' . PHP_EOL . PHP_EOL;
-	print 'options:' . PHP_EOL;
-	print '    --force-report   Send email reports now.' . PHP_EOL;
-	print '    --debug          Provide more verbose debug output.' . PHP_EOL . PHP_EOL;
-}
 
+exit(0);

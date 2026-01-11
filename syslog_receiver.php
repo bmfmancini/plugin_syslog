@@ -1,14 +1,32 @@
 <?php
-/* Simple PHP Syslog Receiver
- * Listens on UDP (default) and inserts messages into syslog_incoming
- */
 
-chdir('../../');
-include('./include/cli_check.php');
-include_once('./lib/poller.php');
-include_once('./plugins/syslog/functions.php');
-include_once('./plugins/syslog/database.php');
+/*
+ +-------------------------------------------------------------------------+
+ | Copyright (C) 2004-2025 The Cacti Group                                 |
+ |                                                                         |
+ | This program is free software; you can redistribute it and/or           |
+ | modify it under the terms of the GNU General Public License             |
+ | as published by the Free Software Foundation; either version 2          |
+ | of the License, or (at your option) any later version.                  |
+ |                                                                         |
+ | This program is distributed in the hope that it will be useful,         |
+ | but WITHOUT ANY WARRANTY; without even the implied warranty of          |
+ | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the           |
+ | GNU General Public License for more details.                            |
+ +-------------------------------------------------------------------------+
+ | Cacti: The Complete RRDTool-based Graphing Solution                     |
+ +-------------------------------------------------------------------------+
+ | This code is designed, written, and maintained by the Cacti Group. See  |
+ | about.php and/or the AUTHORS file for specific developer information.   |
+ +-------------------------------------------------------------------------+
+ | http://www.cacti.net/                                                   |
+ +-------------------------------------------------------------------------+
+*/
 
+
+include(dirname(__FILE__) . '/../../include/cli_check.php');
+include_once(dirname(__FILE__) . '/functions.php');
+include_once(dirname(__FILE__) . '/database.php');
 syslog_connect();
 
 // defaults
@@ -18,13 +36,69 @@ $port = isset($opts['port']) && intval($opts['port']) ? intval($opts['port']) : 
 $interface = isset($opts['interface']) ? $opts['interface'] : '0.0.0.0';
 $debug = isset($opts['debug']);
 
-if (isset($opts['help'])) {
-    echo "Usage: php syslog_receiver.php [--port=514] [--interface=0.0.0.0] [--debug]\n";
-    exit(0);
-}
-
 ini_set('memory_limit', '-1');
 set_time_limit(0);
+
+
+
+/* process calling arguments */
+$parms = $_SERVER['argv'];
+array_shift($parms);
+
+if (cacti_sizeof($parms)) {
+	foreach($parms as $parameter) {
+		if (strpos($parameter, '=')) {
+			list($arg, $value) = explode('=', $parameter);
+		} else {
+			$arg = $parameter;
+			$value = '';
+		}
+
+		switch ($arg) {
+			case '--debug':
+			case '-d':
+				$debug = true;
+
+				break;
+            case '--protocol':
+            case '-p':
+                if (strtolower($value) === 'tcp') {
+                    $use_udp = false;
+                } else {
+                    $use_udp = true;
+                }
+                break;
+            case '--port':
+            case '-P':
+                if (intval($value)) {
+                    $port = intval($value);
+                }
+                break;
+            case '--interface':
+            case '-i':
+                if (!empty($value)) {
+                    $interface = $value;
+                }
+                break;
+			case '--version':
+			case '-V':
+			case '-v':
+				display_version();
+				exit;
+			case '--help':
+			case '-H':
+			case '-h':
+				display_help();
+				exit;
+			default:
+				print "ERROR: Invalid Argument: ($arg)\n\n";
+				display_help();
+				exit(1);
+		}
+	}
+}
+
+
 
 echo "Starting PHP Syslog Receiver on {$interface}:{$port} (UDP)\n";
 
@@ -157,6 +231,42 @@ while (true) {
     if ($debug) {
         echo "[{$logtime}] From={$host} Prog={$program} Fac=" . var_export($facility, true) . " Pri=" . var_export($priority, true) . " Msg=" . substr($message,0,200) . "\n";
     }
+}
+
+
+
+/**
+ * display_help - displays help information
+ *
+ * @return (void)
+ */
+function display_help() {
+	display_version();
+
+	print 'The main Syslog poller process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
+	print 'usage: syslog_process.php [--debug] [--force-report]' . PHP_EOL . PHP_EOL;
+	print 'options:' . PHP_EOL;
+    print '  --protocol=udp|tcp   Protocol to listen on (default: udp).' . PHP_EOL;
+    print '  --port=PORT          Port number to listen on (default: 514).' . PHP_EOL;
+    print '  --interface=IP       Interface IP to bind to (default:0.0.0.0).' . PHP_EOL;
+	print '    --debug          Provide more verbose debug output.' . PHP_EOL . PHP_EOL;
+}
+
+
+/**
+ * display_version - displays version information
+ *
+ * @return (void)
+ */
+function display_version() {
+	global $config;
+
+	if (!function_exists('plugin_syslog_version')) {
+		include_once($config['base_path'] . '/plugins/syslog/setup.php');
+	}
+
+	$version = plugin_syslog_version();
+	print 'Syslog Poller, Version ' . trim($version['version']) . ', ' . COPYRIGHT_YEARS . PHP_EOL;
 }
 
 ?>

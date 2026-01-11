@@ -29,18 +29,14 @@ include_once(dirname(__FILE__) . '/functions.php');
 include_once(dirname(__FILE__) . '/database.php');
 syslog_connect();
 
-
-$opts = getopt('', array('udp::','tcp::','port::','interface::','debug','help'));
-if (read_config_option('syslog_collector_enabled') != 'on')  {
+if (read_config_option('syslog_collector_enabled') !== 'on') {
     echo "Syslog Receiver is disabled in settings. Exiting.\n";
     exit(0);
-};
-
-
+}
 
 $port = read_config_option('syslog_collector_port') ?: 514;
 $interface = read_config_option('syslog_collector_interface') ?: '0.0.0.0';
-$debug = isset($opts['debug']);
+$debug = false;
 
 ini_set('memory_limit', '-1');
 set_time_limit(0);
@@ -66,28 +62,19 @@ if (cacti_sizeof($parms)) {
 			case '--debug':
 			case '-d':
 				$debug = true;
-
 				break;
-            case '--protocol':
-            case '-p':
-                if (strtolower($value) === 'tcp') {
-                    $use_udp = false;
-                } else {
-                    $use_udp = true;
-                }
-                break;
-            case '--port':
-            case '-P':
-                if (intval($value)) {
-                    $port = intval($value);
-                }
-                break;
-            case '--interface':
-            case '-i':
-                if (!empty($value)) {
-                    $interface = $value;
-                }
-                break;
+			case '--port':
+			case '-P':
+				if (intval($value)) {
+					$port = intval($value);
+				}
+				break;
+			case '--interface':
+			case '-i':
+				if (!empty($value)) {
+					$interface = $value;
+				}
+				break;
 			case '--version':
 			case '-V':
 			case '-v':
@@ -106,18 +93,16 @@ if (cacti_sizeof($parms)) {
 	}
 }
 
-
-
-if (read_config_option('syslog_collector_port') ===  '') {
-    cacti_log('syslog_reciever.php: Syslog collector port is not set, defaulting to 514', false, 'syslog');
+if (read_config_option('syslog_collector_port') === '') {
+    cacti_log('syslog_receiver.php: Syslog collector port is not set, defaulting to 514', false, 'syslog');
     if ($debug) {
-        echo "syslog_reciever.php: Syslog collector port is not set in settings, defaulting to 514\n";
+        echo "syslog_receiver.php: Syslog collector port is not set in settings, defaulting to 514\n";
     }
 }
-if (read_config_option('syslog_collector_interface') ===  '') {
-    cacti_log('syslog_reciever.php: Syslog collector interface is not set, defaulting to 0.0.0.0', false, 'syslog');
+if (read_config_option('syslog_collector_interface') === '') {
+    cacti_log('syslog_receiver.php: Syslog collector interface is not set, defaulting to 0.0.0.0', false, 'syslog');
     if ($debug) {
-        echo "syslog_reciever.php: Syslog collector interface is not set in settings, defaulting to 0.0.0.0\n";
+        echo "syslog_receiver.php: Syslog collector interface is not set in settings, defaulting to 0.0.0.0\n";
     }
 }
 
@@ -212,13 +197,14 @@ while (true) {
 function display_help() {
 	display_version();
 
-	print 'The main Syslog poller process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
-	print 'usage: syslog_process.php [--debug] [--force-report]' . PHP_EOL . PHP_EOL;
+	print 'The Syslog receiver process script for Cacti Syslogging.' . PHP_EOL . PHP_EOL;
+	print 'usage: syslog_receiver.php [--port=PORT] [--interface=IP] [--debug]' . PHP_EOL . PHP_EOL;
 	print 'options:' . PHP_EOL;
-    print '  --protocol=udp|tcp   Protocol to listen on (default: udp).' . PHP_EOL;
-    print '  --port=PORT          Port number to listen on (default: 514).' . PHP_EOL;
-    print '  --interface=IP       Interface IP to bind to (default:0.0.0.0).' . PHP_EOL;
-	print '    --debug          Provide more verbose debug output.' . PHP_EOL . PHP_EOL;
+	print '  --port=PORT        Port number to listen on (default: 514).' . PHP_EOL;
+	print '  --interface=IP     Interface IP to bind to (default: 0.0.0.0).' . PHP_EOL;
+	print '  --debug            Provide more verbose debug output.' . PHP_EOL;
+	print '  --version|-v       Display version information.' . PHP_EOL;
+	print '  --help|-h          Display this help message.' . PHP_EOL . PHP_EOL;
 }
 
 
@@ -235,7 +221,7 @@ function display_version() {
 	}
 
 	$version = plugin_syslog_version();
-	print 'Syslog Poller, Version ' . trim($version['version']) . ', ' . COPYRIGHT_YEARS . PHP_EOL;
+	print 'Syslog Receiver, Version ' . trim($version['version']) . ', ' . COPYRIGHT_YEARS . PHP_EOL;
 }
 
 ?>

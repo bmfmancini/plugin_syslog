@@ -713,6 +713,11 @@ function syslog_request_validation($current_tab, $force = false) {
 	}
 
 	// ================= input validation and session storage =================
+	$search_mode = isset_request_var('clear') || isset_request_var('reset') ? 'regex' :
+		(isset_request_var('search_mode') ? get_nfilter_request_var('search_mode') : ($_SESSION['sess_sl_' . $current_tab . '_search_mode'] ?? 'regex'));
+	$search_mode = $search_mode === 'logical' ? 'logical' : 'regex';
+	set_request_var('search_mode', $search_mode);
+
 	$filters = [
 		'rows' => [
 			'filter'  => FILTER_VALIDATE_INT,
@@ -781,8 +786,14 @@ function syslog_request_validation($current_tab, $force = false) {
 			'pageset' => true,
 			'default' => read_user_setting('syslog_grouping', '0', $force),
 		],
+		'search_mode' => [
+			'filter' => FILTER_CALLBACK,
+			'options' => ['options' => function ($value) { return $value === 'logical' ? 'logical' : 'regex'; }],
+			'pageset' => true,
+			'default' => 'regex'
+		],
 		'rfilter' => [
-			'filter'  => FILTER_VALIDATE_IS_REGEX,
+			'filter'  => $search_mode === 'logical' ? FILTER_UNSAFE_RAW : FILTER_VALIDATE_IS_REGEX,
 			'pageset' => true,
 			'default' => ''
 		],
@@ -810,7 +821,24 @@ function syslog_request_validation($current_tab, $force = false) {
 		]
 	];
 
+	$logical_input = $search_mode === 'logical' && isset_request_var('rfilter') && !isset_request_var('clear') ? get_nfilter_request_var('rfilter') : null;
 	validate_store_request_vars($filters, 'sess_sl_' . $current_tab);
+	// Preserve literal text, including Cacti's special 'undefined' sentinel.
+	if (is_string($logical_input)) {
+		set_request_var('rfilter', $logical_input);
+		$_SESSION['sess_sl_' . $current_tab . '_rfilter'] = $logical_input;
+	}
+
+	$GLOBALS['syslog_search_tree'] = null;
+	$GLOBALS['syslog_search_error'] = '';
+	if (get_request_var('search_mode') === 'logical') {
+		try {
+			$GLOBALS['syslog_search_tree'] = syslog_parse_logical_search(get_request_var('rfilter'));
+		} catch (InvalidArgumentException $error) {
+			$GLOBALS['syslog_search_error'] = __('Invalid logical search: %s', $error->getMessage(), 'syslog');
+		}
+	}
+
 	// ================= input validation =================
 
 	// Modify session and request variables based upon span/shift/settings
@@ -951,6 +979,11 @@ function get_syslog_messages(&$sql_where, $rows, $tab) {
 		}
 	}
 
+	// Keep host alternatives inside the restrictions applied below.
+	if ($sql_where !== '') {
+		$sql_where = 'WHERE (' . substr($sql_where, 6) . ')';
+	}
+
 	$sql_where .= ($sql_where == '' ? 'WHERE ' : ' AND ') .
 		"logtime BETWEEN '" . get_request_var('date1') . "'
 			AND '" . get_request_var('date2') . "'";
@@ -960,12 +993,15 @@ function get_syslog_messages(&$sql_where, $rows, $tab) {
 			'sa.id=' . get_request_var('id');
 	}
 
-	if (!isempty_request_var('rfilter')) {
-		if ($tab == 'syslog') {
-			$sql_where .= ($sql_where == '' ? 'WHERE ' : ' AND ') . "message RLIKE '" . get_request_var('rfilter') . "'";
-		} else {
-			$sql_where .= ($sql_where == '' ? 'WHERE ' : ' AND ') . "logmsg RLIKE '" . get_request_var('rfilter') . "'";
+	if (get_request_var('search_mode') === 'logical') {
+		$predicate = !empty($GLOBALS['syslog_search_error']) ? '(1 = 0)' :
+			syslog_logical_search_sql($GLOBALS['syslog_search_tree'] ?? null, $tab == 'syslog' ? 'message' : 'logmsg');
+		if ($predicate !== '') {
+			$sql_where .= ($sql_where == '' ? 'WHERE ' : ' AND ') . $predicate;
 		}
+	} elseif (!isempty_request_var('rfilter')) {
+		$sql_where .= ($sql_where == '' ? 'WHERE ' : ' AND ') .
+			($tab == 'syslog' ? 'message' : 'logmsg') . ' RLIKE ' . db_qstr(get_request_var('rfilter'));
 	}
 
 	if (get_request_var('eprogram') != '-1') {
@@ -1296,7 +1332,18 @@ function syslog_filter($sql_where, $tab) {
 							<?php print __('Search', 'syslog'); ?>
 						</td>
 						<td>
-							<input type='text' id='rfilter' size='30' value='<?php print html_escape_request_var('rfilter'); ?>' onChange='applyFilter()'>
+							<select id='search_mode' aria-label='<?php print __esc('Search mode', 'syslog'); ?>'>
+								<option value='regex' <?php print get_request_var('search_mode') == 'regex' ? 'selected' : ''; ?>><?php print __('Regex', 'syslog'); ?></option>
+								<option value='logical' <?php print get_request_var('search_mode') == 'logical' ? 'selected' : ''; ?>><?php print __('Logical', 'syslog'); ?></option>
+							</select>
+							<input type='text' id='rfilter' size='40' aria-label='<?php print __esc('Search messages', 'syslog'); ?>' aria-describedby='logical_search_help logical_search_error' value='<?php print html_escape_request_var('rfilter'); ?>'>
+							<span id='logical_search_controls'>
+								<?php foreach (['AND', 'OR', 'NOT'] as $operator) { ?>
+								<button type='button' class='syslogSearchOperator' data-operator='<?php print $operator; ?>'><?php print $operator; ?></button>
+								<?php } ?>
+								<span id='logical_search_help'><?php print __esc('Example: (error OR warning) AND NOT timeout. Plain text matches a phrase; quote literal operators. Precedence: NOT, AND, OR.', 'syslog'); ?></span>
+							</span>
+							<div id='logical_search_error' role='alert'><?php print html_escape($GLOBALS['syslog_search_error'] ?? ''); ?></div>
 						</td>
 						<td>
 							<?php print __('Devices', 'syslog'); ?>
@@ -1827,7 +1874,7 @@ function syslog_messages($tab = 'syslog') {
 
 				form_selectable_ecell(isset($hosts[$sm['host_id']]) ? $hosts[$sm['host_id']] : __('Unknown', 'syslog'), $sm['seq'], '', 'left');
 				form_selectable_ecell($sm['program'], $sm['seq'], '', 'left');
-				form_selectable_ecell(filter_value(title_trim($sm[$syslog_incoming_config['textField']], get_request_var_request('trimval')), get_request_var('rfilter')), $sm['seq'], '', 'left syslogMessage');
+				form_selectable_ecell(syslog_message_filter_value(title_trim($sm[$syslog_incoming_config['textField']], get_request_var_request('trimval')), get_request_var('rfilter')), $sm['seq'], '', 'left syslogMessage');
 				form_selectable_ecell(isset($facilities[$sm['facility_id']]) ? $facilities[$sm['facility_id']] : __('Unknown', 'syslog'), $sm['seq'], '', 'left');
 				form_selectable_ecell(isset($priorities[$sm['priority_id']]) ? $priorities[$sm['priority_id']] : __('Unknown', 'syslog'), $sm['seq'], '', 'left');
 
@@ -1868,7 +1915,7 @@ function syslog_messages($tab = 'syslog') {
 							print "<td class='left' style='padding-left:30px;'>" . html_escape($dm['logtime']) . '</td>';
 							print "<td class='left'>" . html_escape(isset($hosts[$dm['host_id']]) ? $hosts[$dm['host_id']] : __('Unknown', 'syslog')) . '</td>';
 							print "<td class='left'>" . html_escape($dm['program']) . '</td>';
-							print "<td class='left syslogMessage'>" . filter_value(title_trim($dm[$syslog_incoming_config['textField']], get_request_var_request('trimval')), get_request_var('rfilter')) . '</td>';
+							print "<td class='left syslogMessage'>" . syslog_message_filter_value(title_trim($dm[$syslog_incoming_config['textField']], get_request_var_request('trimval')), get_request_var('rfilter')) . '</td>';
 							print "<td class='left'>" . html_escape(isset($facilities[$dm['facility_id']]) ? $facilities[$dm['facility_id']] : __('Unknown', 'syslog')) . '</td>';
 							print "<td class='left'>" . html_escape(isset($priorities[$dm['priority_id']]) ? $priorities[$dm['priority_id']] : __('Unknown', 'syslog')) . '</td>';
 
@@ -1928,7 +1975,7 @@ function syslog_messages($tab = 'syslog') {
 
 				form_selectable_cell(isset($severities[$log['severity']]) ? $severities[$log['severity']] : __('Unknown', 'syslog'), $log['seq'], '', 'left');
 				form_selectable_cell($log['logtime'], $log['seq'], '', 'left');
-				form_selectable_cell(filter_value(title_trim($log['logmsg'], get_request_var_request('trimval')), get_request_var('rfilter')), $log['seq'], '', 'syslogMessage left');
+				form_selectable_cell(syslog_message_filter_value(title_trim($log['logmsg'], get_request_var_request('trimval')), get_request_var('rfilter')), $log['seq'], '', 'syslogMessage left');
 
 				form_selectable_cell($log['count'], $log['seq'], '', 'right');
 				form_selectable_cell($log['host'], $log['seq'], '', 'right');

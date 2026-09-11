@@ -22,6 +22,144 @@
  +-------------------------------------------------------------------------+
 */
 
+/** Parse literal message searches. Uppercase operators bind NOT, AND, then OR. */
+function syslog_parse_logical_search($input) {
+	if (strlen($input) > 8192) {
+		throw new InvalidArgumentException('Search is too long (maximum 8192 bytes).');
+	}
+
+	$tokens = [];
+	$length = strlen($input);
+	for ($i = 0; $i < $length;) {
+		if (ctype_space($input[$i])) {
+			$i++;
+			continue;
+		}
+		if ($input[$i] == '(' || $input[$i] == ')') {
+			$tokens[] = [$input[$i++], ''];
+		} elseif ($input[$i] == '"') {
+			$value = '';
+			$closed = false;
+			for ($i++; $i < $length; $i++) {
+				if ($input[$i] == '"') {
+					$i++;
+					$closed = true;
+					break;
+				}
+				if ($input[$i] == '\\' && $i + 1 < $length && ($input[$i + 1] == '"' || $input[$i + 1] == '\\')) {
+					$i++;
+				}
+				$value .= $input[$i];
+			}
+			if (!$closed || $value === '') {
+				throw new InvalidArgumentException('Use a nonempty phrase with a closing double quote.');
+			}
+			$tokens[] = ['term', $value];
+		} elseif (preg_match('/\G(AND|OR|NOT)(?=\s|[()"]|$)/', $input, $match, 0, $i)) {
+			$tokens[] = [$match[1], ''];
+			$i += strlen($match[1]);
+		} else {
+			$start = $i++;
+			while ($i < $length && strpos('()"', $input[$i]) === false) {
+				if (ctype_space($input[$i - 1]) && preg_match('/\G(AND|OR|NOT)(?=\s|[()"]|$)/', $input, $match, 0, $i)) {
+					break;
+				}
+				$i++;
+			}
+			$tokens[] = ['term', trim(substr($input, $start, $i - $start))];
+		}
+	}
+	if (!$tokens) {
+		return null;
+	}
+	if (count($tokens) > 256) {
+		throw new InvalidArgumentException('Search is too complex (maximum 256 tokens).');
+	}
+	$position = 0;
+	$parse = function ($minimum = 0, $depth = 0) use (&$parse, &$position, $tokens) {
+		if ($depth > 32) {
+			throw new InvalidArgumentException('Search nesting is too deep (maximum 32 levels).');
+		}
+		$token = $tokens[$position++] ?? ['', ''];
+		if ($token[0] == 'NOT') {
+			$node = ['NOT', $parse(3, $depth + 1)];
+		} elseif ($token[0] == '(') {
+			$node = $parse(0, $depth + 1);
+			if (($tokens[$position++][0] ?? '') != ')') {
+				throw new InvalidArgumentException('Expected a closing parenthesis.');
+			}
+		} elseif ($token[0] == 'term') {
+			$node = $token;
+		} else {
+			throw new InvalidArgumentException('Expected a search term, NOT, or an opening parenthesis.');
+		}
+		while (isset($tokens[$position])) {
+			$operator = $tokens[$position][0];
+			$precedence = ['OR' => 1, 'AND' => 2][$operator] ?? 0;
+			if (!$precedence || $precedence < $minimum) {
+				break;
+			}
+			$position++;
+			$node = [$operator, $node, $parse($precedence + 1, $depth + 1)];
+		}
+		return $node;
+	};
+	$tree = $parse();
+	if ($position != count($tokens)) {
+		throw new InvalidArgumentException('Expected AND or OR between terms, or found an extra closing parenthesis.');
+	}
+	return $tree;
+}
+
+/** LOCATE treats wildcard and regex characters literally and uses column collation. */
+function syslog_logical_search_sql($tree, $column) {
+	if (!in_array($column, ['message', 'logmsg'], true)) {
+		throw new InvalidArgumentException('Invalid message column.');
+	}
+	if ($tree === null) {
+		return '';
+	}
+	if ($tree[0] == 'term') {
+		return '(LOCATE(' . db_qstr($tree[1]) . ', ' . $column . ') > 0)';
+	}
+	if ($tree[0] == 'NOT') {
+		return '(NOT ' . syslog_logical_search_sql($tree[1], $column) . ')';
+	}
+	return '(' . syslog_logical_search_sql($tree[1], $column) . ' ' . $tree[0] . ' ' . syslog_logical_search_sql($tree[2], $column) . ')';
+}
+
+function syslog_logical_positive_terms($tree, $negative = false) {
+	if ($tree === null) {
+		return [];
+	}
+	if ($tree[0] == 'term') {
+		return $negative ? [] : [$tree[1]];
+	}
+	if ($tree[0] == 'NOT') {
+		return syslog_logical_positive_terms($tree[1], !$negative);
+	}
+	return array_merge(syslog_logical_positive_terms($tree[1], $negative), syslog_logical_positive_terms($tree[2], $negative));
+}
+
+function syslog_message_filter_value($value, $filter, $href = '') {
+	if (get_request_var('search_mode') != 'logical') {
+		return filter_value($value, $filter, $href);
+	}
+	$terms = syslog_logical_positive_terms($GLOBALS['syslog_search_tree'] ?? null);
+	usort($terms, function ($a, $b) { return strlen($b) - strlen($a); });
+	$pattern = $terms ? '~(' . implode('|', array_map(function ($term) { return preg_quote($term, '~'); }, $terms)) . ')~iu' : '';
+	$parts = $pattern ? preg_split($pattern, $value, -1, PREG_SPLIT_DELIM_CAPTURE) : [$value];
+	if ($parts === false) {
+		$parts = [$value];
+	}
+	$output = '';
+	foreach ($parts as $index => $part) {
+		$escaped = htmlspecialchars($part, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$output .= $index % 2 ? '<span class="filteredValue">' . $escaped . '</span>' : $escaped;
+	}
+	return $href === '' ? $output : '<a class="linkEditMain" href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">' . $output . '</a>';
+}
+
 function syslog_apply_selected_items_action($selected_items, $drp_action, $action_map, $export_action = '', $export_items = '') {
 	if ($selected_items != false) {
 		if (isset($action_map[$drp_action])) {
@@ -786,6 +924,13 @@ function sql_hosts_where($tab) {
 }
 
 function syslog_export($tab) {
+	if (!empty($GLOBALS['syslog_search_error'])) {
+		http_response_code(400);
+		header('Content-Type: text/plain; charset=UTF-8');
+		print $GLOBALS['syslog_search_error'];
+		return;
+	}
+
 	global $syslog_incoming_config, $severities;
 	global $syslogdb_default;
 

@@ -76,7 +76,8 @@ function applyFilter() {
 
 	strURL += '&header=false';
 	strURL += '&host='+$('#host').val();
-	strURL += '&rfilter='+base64_encode($('#rfilter').val());
+	strURL += '&search_mode=' + $('#search_mode').val();
+	strURL += '&rfilter=' + encodeURIComponent($('#search_mode').val() === 'logical' ? $('#rfilter').val() : base64_encode($('#rfilter').val()));
 	strURL += '&efacility='+$('#efacility').val();
 	strURL += '&epriority='+$('#epriority').val();
 	strURL += '&eprogram='+$('#eprogram').val();
@@ -96,7 +97,9 @@ function applyFilter() {
  * Export records to CSV
  */
 function exportRecords() {
-	document.location = 'syslog.php?export=true';
+	document.location = 'syslog.php?export=true&tab=' + encodeURIComponent(window.pageTab || 'syslog') +
+		'&search_mode=' + $('#search_mode').val() + '&rfilter=' +
+		encodeURIComponent($('#search_mode').val() === 'logical' ? $('#rfilter').val() : base64_encode($('#rfilter').val()));
 	Pace.stop();
 }
 
@@ -177,6 +180,27 @@ function initSyslogMain(config) {
 	window.pageTab = pageTab;
 
 	$(function() {
+		$('#logical_search_controls').toggle($('#search_mode').val() === 'logical');
+		$('#search_mode').on('change', function() {
+			$('#logical_search_controls').toggle(this.value === 'logical');
+			$('#rfilter').focus();
+		});
+		$('#rfilter').on('change', function() {
+			if ($('#search_mode').val() === 'regex') {
+				applyFilter();
+			}
+		});
+		$('.syslogSearchOperator').on('mousedown', function(event) {
+			event.preventDefault();
+		}).on('click', function() {
+			var input = document.getElementById('rfilter');
+			var start = input.selectionStart;
+			var end = input.selectionEnd;
+			var insertion = (start > 0 && !/\s/.test(input.value[start - 1]) ? ' ' : '') + $(this).data('operator') + ' ';
+			input.value = input.value.slice(0, start) + insertion + input.value.slice(end);
+			input.focus();
+			input.setSelectionRange(start + insertion.length, start + insertion.length);
+		});
 		$('#syslog_form').submit(function(event) {
 			event.preventDefault();
 			applyFilter();

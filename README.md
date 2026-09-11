@@ -209,5 +209,28 @@ stable and robust versions of syslog ever published. We are always looking for
 new ideas. So, this won't be the last release of syslog, you can rest assured of
 that.
 
+## Logical message searches
+
+In the message viewer or triggered-alert message view, select **Logical** beside
+Search. Use **AND**, **OR**, and **NOT** to combine literal message text:
+
+* `(error OR warning) AND NOT timeout`
+* `connection refused OR permission denied`
+* `"AND" AND NOT "(ignored)"`
+
+Operators must be uppercase and standalone. NOT binds before AND, then OR;
+parentheses override that order. Text between operators matches a literal phrase,
+including spaces. Double quotes let you search for literal operators or
+parentheses. Inside quotes, use `\"` for a quote and `\\` for a backslash.
+Wildcards such as `%` and `_`, and regex characters, are ordinary text in Logical
+mode. Case sensitivity follows the database column's collation.
+
+The operator buttons insert at the cursor. Press Enter or Go to search. Invalid
+expressions display an error and return no results; CSV export rejects them too.
+Search mode and text are retained per message tab, including pagination, refresh,
+and export. Clear restores Regex mode and an empty search. Existing regular
+expression searches remain available in **Regex**, the default mode. Logical
+searches allow up to 8192 bytes, 256 tokens, and 32 nesting levels.
+
 -----------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

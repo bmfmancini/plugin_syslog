@@ -71,7 +71,182 @@ function applyTimespan() {
 /**
  * Apply main syslog filter
  */
+/** Convert saved searches to editable conditions, retaining explicit groups. */
+function syslogSearchRows(tree) {
+	var rows = [];
+	function append(node, join, minimum) {
+		if (!node) {
+			return;
+		}
+		var precedence = {OR: 1, AND: 2}[node[0]];
+		if (precedence && precedence >= minimum) {
+			append(node[1], join, precedence);
+			append(node[2], node[0], precedence);
+		} else if (node[0] === 'term') {
+			rows.push({join: join, negative: false, value: node[1]});
+		} else if (node[0] === 'NOT') {
+			var children = syslogSearchRows(node[1]);
+			if (children.length === 1) {
+				children[0].join = join;
+				children[0].negative = !children[0].negative;
+				rows.push(children[0]);
+			} else {
+				rows.push({join: join, negative: true, rows: children});
+			}
+		} else {
+			rows.push({join: join, negative: false, rows: syslogSearchRows(node)});
+		}
+	}
+	append(tree, 'AND', 0);
+	return rows;
+}
+
+/** Serialize literal row values; users never have to quote search syntax. */
+function syslogSearchExpression(rows) {
+	return rows.map(function(row, index) {
+		var term = row.rows ? '(' + syslogSearchExpression(row.rows) + ')' :
+			'"' + row.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+		return (index ? ' ' + row.join + ' ' : '') + (row.negative ? 'NOT ' : '') + term;
+	}).join('');
+}
+
+function syncSyslogSearchBuilder() {
+	var builder = document.getElementById('syslog_search_builder');
+	if (!builder || $('#search_mode').val() !== 'logical') {
+		return true;
+	}
+	var inputs = builder.querySelectorAll('.syslogSearchText');
+	if (inputs.length === 1 && inputs[0].value === '' && builder.querySelectorAll('.syslogSearchRow').length === 1) {
+		$('#rfilter').val('');
+		return true;
+	}
+	for (var input of inputs) {
+		if (!input.reportValidity()) {
+			return false;
+		}
+	}
+	$('#rfilter').val(syslogSearchExpression(builder.searchRows));
+	return true;
+}
+
+function initSyslogSearchBuilder() {
+	var builder = document.getElementById('syslog_search_builder');
+	if (!builder) {
+		return;
+	}
+	var labels = builder.dataset;
+	var tree = JSON.parse(labels.tree || 'null');
+	builder.searchRows = syslogSearchRows(tree);
+	if (!builder.searchRows.length) {
+		builder.searchRows.push({join: 'AND', negative: false, value: $('#rfilter').val() || ''});
+	}
+
+	function element(tag, className, text) {
+		var node = document.createElement(tag);
+		node.className = className;
+		if (text) {
+			node.textContent = text;
+		}
+		return node;
+	}
+	function select(options, value, label, onChange) {
+		var node = element('select', '');
+		node.setAttribute('aria-label', label);
+		options.forEach(function(option) {
+			var item = element('option', '', option[1]);
+			item.value = option[0];
+			node.appendChild(item);
+		});
+		node.value = value;
+		node.addEventListener('change', function() { onChange(node.value); });
+		return node;
+	}
+	function render(container, rows) {
+		container.replaceChildren();
+		rows.forEach(function(row, index) {
+			var line = element('div', 'syslogSearchRow');
+			if (index) {
+				line.appendChild(select([['AND', 'AND'], ['OR', 'OR']], row.join, 'AND / OR', function(value) { row.join = value; }));
+			}
+			if (row.rows) {
+				line.appendChild(select([['0', labels.match], ['1', labels.exclude]], row.negative ? '1' : '0', labels.message, function(value) { row.negative = value === '1'; }));
+				var group = element('div', 'syslogSearchGroup');
+				render(group, row.rows);
+				line.appendChild(group);
+			} else {
+				line.appendChild(element('span', '', labels.message));
+				line.appendChild(select([['0', labels.contains], ['1', labels.notContains]], row.negative ? '1' : '0', labels.message, function(value) { row.negative = value === '1'; }));
+				var input = element('input', 'syslogSearchText');
+				input.type = 'text';
+				input.size = 35;
+				input.required = true;
+				input.value = row.value;
+				input.setAttribute('aria-label', labels.message);
+				input.addEventListener('input', function() { row.value = input.value; });
+				line.appendChild(input);
+			}
+			var remove = element('button', 'syslogSearchRemove', '\u00d7');
+			remove.type = 'button';
+			remove.title = labels.remove;
+			remove.setAttribute('aria-label', labels.remove);
+			remove.addEventListener('click', function() {
+				rows.splice(index, 1);
+				if (!rows.length) {
+					rows.push({join: 'AND', negative: false, value: ''});
+				}
+				render(container, rows);
+				container.querySelector('.syslogSearchText').focus();
+			});
+			line.appendChild(remove);
+			container.appendChild(line);
+		});
+		var actions = element('div', 'syslogSearchActions');
+		['AND', 'OR', 'NOT'].forEach(function(operator) {
+			var button = element('button', 'syslogSearchAdd', operator);
+			button.type = 'button';
+			button.addEventListener('click', function() {
+				rows.push({join: operator === 'OR' ? 'OR' : 'AND', negative: operator === 'NOT', value: ''});
+				render(container, rows);
+				var inputs = container.querySelectorAll('.syslogSearchText');
+				inputs[inputs.length - 1].focus();
+			});
+			actions.appendChild(button);
+		});
+		container.appendChild(actions);
+	}
+	var previousMode = $('#search_mode').val();
+	function showMode() {
+		var logical = $('#search_mode').val() === 'logical';
+		builder.hidden = !logical;
+		$('#logical_search_help').toggle(logical);
+		$('#rfilter').toggle(!logical);
+		// Hidden builder inputs must not participate in native form validation.
+		builder.querySelectorAll('input').forEach(function(input) { input.disabled = !logical; });
+	}
+	render(builder, builder.searchRows);
+	showMode();
+	$('#search_mode').on('change', function() {
+		if (this.value === 'logical' && previousMode === 'regex') {
+			builder.searchRows = [{join: 'AND', negative: false, value: $('#rfilter').val()}];
+			render(builder, builder.searchRows);
+		}
+		previousMode = this.value;
+		showMode();
+	});
+	$('#rfilter').on('change', function() {
+		if ($('#search_mode').val() === 'regex') {
+			applyFilter();
+		}
+	});
+	// Go/Enter share custom validation, which permits a single empty search row.
+	$('#syslog_form').attr('novalidate', 'novalidate');
+}
+
 function applyFilter() {
+	if (!syncSyslogSearchBuilder()) {
+		return;
+	}
+
 	var strURL  = 'syslog.php?tab='+(window.pageTab || '');
 
 	strURL += '&header=false';
@@ -97,6 +272,10 @@ function applyFilter() {
  * Export records to CSV
  */
 function exportRecords() {
+	if (!syncSyslogSearchBuilder()) {
+		return;
+	}
+
 	document.location = 'syslog.php?export=true&tab=' + encodeURIComponent(window.pageTab || 'syslog') +
 		'&search_mode=' + $('#search_mode').val() + '&rfilter=' +
 		encodeURIComponent($('#search_mode').val() === 'logical' ? $('#rfilter').val() : base64_encode($('#rfilter').val()));
@@ -180,27 +359,7 @@ function initSyslogMain(config) {
 	window.pageTab = pageTab;
 
 	$(function() {
-		$('#logical_search_controls').toggle($('#search_mode').val() === 'logical');
-		$('#search_mode').on('change', function() {
-			$('#logical_search_controls').toggle(this.value === 'logical');
-			$('#rfilter').focus();
-		});
-		$('#rfilter').on('change', function() {
-			if ($('#search_mode').val() === 'regex') {
-				applyFilter();
-			}
-		});
-		$('.syslogSearchOperator').on('mousedown', function(event) {
-			event.preventDefault();
-		}).on('click', function() {
-			var input = document.getElementById('rfilter');
-			var start = input.selectionStart;
-			var end = input.selectionEnd;
-			var insertion = (start > 0 && !/\s/.test(input.value[start - 1]) ? ' ' : '') + $(this).data('operator') + ' ';
-			input.value = input.value.slice(0, start) + insertion + input.value.slice(end);
-			input.focus();
-			input.setSelectionRange(start + insertion.length, start + insertion.length);
-		});
+		initSyslogSearchBuilder();
 		$('#syslog_form').submit(function(event) {
 			event.preventDefault();
 			applyFilter();

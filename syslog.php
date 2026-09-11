@@ -713,8 +713,8 @@ function syslog_request_validation($current_tab, $force = false) {
 	}
 
 	// ================= input validation and session storage =================
-	$search_mode = isset_request_var('clear') || isset_request_var('reset') ? 'regex' :
-		(isset_request_var('search_mode') ? get_nfilter_request_var('search_mode') : ($_SESSION['sess_sl_' . $current_tab . '_search_mode'] ?? 'regex'));
+	$search_mode = isset_request_var('clear') || isset_request_var('reset') ? 'logical' :
+		(isset_request_var('search_mode') ? get_nfilter_request_var('search_mode') : ($_SESSION['sess_sl_' . $current_tab . '_search_mode'] ?? (isset($_SESSION['sess_sl_' . $current_tab . '_rfilter']) || isset_request_var('rfilter') ? 'regex' : 'logical')));
 	$search_mode = $search_mode === 'logical' ? 'logical' : 'regex';
 	set_request_var('search_mode', $search_mode);
 
@@ -790,7 +790,7 @@ function syslog_request_validation($current_tab, $force = false) {
 			'filter' => FILTER_CALLBACK,
 			'options' => ['options' => function ($value) { return $value === 'logical' ? 'logical' : 'regex'; }],
 			'pageset' => true,
-			'default' => 'regex'
+			'default' => 'logical'
 		],
 		'rfilter' => [
 			'filter'  => $search_mode === 'logical' ? FILTER_UNSAFE_RAW : FILTER_VALIDATE_IS_REGEX,
@@ -1333,16 +1333,20 @@ function syslog_filter($sql_where, $tab) {
 						</td>
 						<td>
 							<select id='search_mode' aria-label='<?php print __esc('Search mode', 'syslog'); ?>'>
+								<option value='logical' <?php print get_request_var('search_mode') == 'logical' ? 'selected' : ''; ?>><?php print __('Build search', 'syslog'); ?></option>
 								<option value='regex' <?php print get_request_var('search_mode') == 'regex' ? 'selected' : ''; ?>><?php print __('Regex', 'syslog'); ?></option>
-								<option value='logical' <?php print get_request_var('search_mode') == 'logical' ? 'selected' : ''; ?>><?php print __('Logical', 'syslog'); ?></option>
 							</select>
-							<input type='text' id='rfilter' size='40' aria-label='<?php print __esc('Search messages', 'syslog'); ?>' aria-describedby='logical_search_help logical_search_error' value='<?php print html_escape_request_var('rfilter'); ?>'>
-							<span id='logical_search_controls'>
-								<?php foreach (['AND', 'OR', 'NOT'] as $operator) { ?>
-								<button type='button' class='syslogSearchOperator' data-operator='<?php print $operator; ?>'><?php print $operator; ?></button>
-								<?php } ?>
-								<span id='logical_search_help'><?php print __esc('Example: (error OR warning) AND NOT timeout. Plain text matches a phrase; quote literal operators. Precedence: NOT, AND, OR.', 'syslog'); ?></span>
-							</span>
+							<input type='text' id='rfilter' size='40' aria-label='<?php print __esc('Search messages', 'syslog'); ?>' value='<?php print html_escape_request_var('rfilter'); ?>'>
+							<div id='syslog_search_builder'
+								data-tree='<?php print html_escape(json_encode($GLOBALS['syslog_search_tree'] ?? null)); ?>'
+								data-message='<?php print __esc('Message', 'syslog'); ?>'
+								data-contains='<?php print __esc('contains', 'syslog'); ?>'
+								data-not-contains='<?php print __esc('does not contain', 'syslog'); ?>'
+								data-remove='<?php print __esc('Remove condition', 'syslog'); ?>'
+								data-match='<?php print __esc('Match group', 'syslog'); ?>'
+								data-exclude='<?php print __esc('Exclude group', 'syslog'); ?>'>
+							</div>
+							<div id='logical_search_help'><?php print __esc('Enter message text, then use AND, OR, or NOT to add another condition. AND conditions are matched together; OR adds an alternative.', 'syslog'); ?></div>
 							<div id='logical_search_error' role='alert'><?php print html_escape($GLOBALS['syslog_search_error'] ?? ''); ?></div>
 						</td>
 						<td>

@@ -206,6 +206,7 @@ function initSyslogSearchBuilder() {
 		var actions = element('div', 'syslogSearchActions');
 		['AND', 'OR', 'NOT'].forEach(function(operator) {
 			var button = element('button', 'syslogSearchAdd', operator);
+			button.setAttribute('aria-label', operator);
 			button.type = 'button';
 			button.addEventListener('click', function() {
 				rows.push({join: operator === 'OR' ? 'OR' : 'AND', negative: operator === 'NOT', value: ''});

@@ -22,37 +22,48 @@
  +-------------------------------------------------------------------------+
 */
 
-include(__DIR__ . '/../../include/cli_check.php');
+$root = dirname(__DIR__, 2);
 
-$sli = read_config_option('syslog_last_incoming');
-$slt = read_config_option('syslog_last_total');
+$functions = file_get_contents($root . '/functions.php');
 
-$line   = syslog_db_fetch_row("SHOW TABLE STATUS LIKE 'syslog_incoming'");
-$i_rows = $line['Auto_increment'];
-
-$line       = syslog_db_fetch_row("SHOW TABLE STATUS LIKE 'syslog'");
-$total_rows = $line['Auto_increment'];
-
-if ($sli == '') {
-	$sql = "REPLACE INTO settings VALUES ('syslog_last_incoming','$i_rows')";
-} else {
-	$sql = "UPDATE settings SET value='$i_rows' WHERE name='syslog_last_incoming'";
-}
-db_execute($sql);
-
-if ($slt == '') {
-	$sql = "REPLACE INTO settings VALUES ('syslog_last_total','$total_rows')";
-} else {
-	$sql = "UPDATE settings SET value='$total_rows' WHERE name='syslog_last_total'";
-}
-db_execute($sql);
-
-if ($sli == '') {
-	$sli = 0;
+if ($functions === false) {
+	fwrite(STDERR, "Failed to load functions.php\n");
+	exit(1);
 }
 
-if ($slt == '') {
-	$slt = 0;
+if (strpos($functions, 'function syslog_get_import_xml_payload(') === false) {
+	fwrite(STDERR, "Shared import payload loader helper is missing.\n");
+	exit(1);
 }
 
-print 'total:' . ($total_rows - $slt) . ' incoming:' . ($i_rows - $sli);
+if (strpos($functions, "trim(get_nfilter_request_var('import_text')) != ''") === false) {
+	fwrite(STDERR, "Shared import payload loader is missing trimmed text handling.\n");
+	exit(1);
+}
+
+$targets = [
+	$root . '/syslog_alerts.php',
+	$root . '/syslog_reports.php',
+	$root . '/syslog_removal.php'
+];
+
+foreach ($targets as $target) {
+	$content = file_get_contents($target);
+
+	if ($content === false) {
+		fwrite(STDERR, "Failed to load $target\n");
+		exit(1);
+	}
+
+	if (strpos($content, 'syslog_get_import_xml_payload(') === false) {
+		fwrite(STDERR, "Shared import payload loader is not used in $target\n");
+		exit(1);
+	}
+
+	if (strpos($content, "\$_FILES['import_file']['tmp_name']") !== false) {
+		fwrite(STDERR, "Legacy per-file upload payload loading remains in $target\n");
+		exit(1);
+	}
+}
+
+print "issue277_import_payload_loader_test passed\n";

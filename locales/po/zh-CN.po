@@ -30,12 +30,12 @@ msgstr "请使用HTML电子邮件客户端"
 #: functions.php:1304
 #, fuzzy, php-format
 msgid "Cacti Syslog Threshold Alert '%s' for Host '%s'"
-msgstr "Cacti Syslog插件阈值警报'％s'"
+msgstr "Cacti Syslog插件阈值警报'%s'"
 
 #: functions.php:1306
 #, fuzzy, php-format
 msgid "Cacti Syslog Threshold Alert '%s'"
-msgstr "Cacti Syslog插件阈值警报'％s'"
+msgstr "Cacti Syslog插件阈值警报'%s'"
 
 #: functions.php:1314 syslog.php:1896 syslog_alerts.php:874
 msgid "Alert Name"
@@ -62,12 +62,12 @@ msgstr "匹配字符串"
 #: functions.php:1329 functions.php:1368
 #, fuzzy, php-format
 msgid "Cacti Syslog Alert '%s' for Host '%s'"
-msgstr "Cacti Syslog插件阈值警报'％s'"
+msgstr "Cacti Syslog插件阈值警报'%s'"
 
 #: functions.php:1331 functions.php:1370
 #, fuzzy, php-format
 msgid "Cacti Syslog Alert '%s'"
-msgstr "Cacti Syslog插件警报'％s'"
+msgstr "Cacti Syslog插件警报'%s'"
 
 #: functions.php:1340
 msgid "Hostname"
@@ -152,7 +152,7 @@ msgstr "西弗："
 #: functions.php:1490 functions.php:1544
 #, fuzzy, php-format
 msgid "Event Alert - %s"
-msgstr "事件警报 - ％s"
+msgstr "事件警报 - %s"
 
 #: functions.php:1548
 #, fuzzy
@@ -166,7 +166,7 @@ msgstr "主机"
 #: functions.php:2116
 #, fuzzy, php-format
 msgid "Event Report - %s"
-msgstr "活动报告 - ％s"
+msgstr "活动报告 - %s"
 
 #: setup.php:34
 #, fuzzy
@@ -252,7 +252,7 @@ msgstr "选择您希望每天创建的分区数。"
 #: setup.php:918 setup.php:919 setup.php:920 setup.php:921 setup.php:922
 #, php-format
 msgid "%d Per Day"
-msgstr "％d 每天"
+msgstr "%d 每天"
 
 #: setup.php:927 setup.php:1015
 msgid "Upgrade"
@@ -265,7 +265,7 @@ msgstr "安装"
 #: setup.php:933
 #, fuzzy, php-format
 msgid "Syslog %s Advisor"
-msgstr "Syslog％s顾问"
+msgstr "Syslog%s顾问"
 
 #: setup.php:937
 msgid "WARNING: Syslog Upgrade is Time Consuming!!!"
@@ -291,7 +291,7 @@ msgstr "安装Syslog时有几个选项可供选择。第一个是数据库架构
 #: setup.php:945
 #, fuzzy, php-format
 msgid "Syslog %s Settings"
-msgstr "Syslog％s设置"
+msgstr "Syslog%s设置"
 
 #: setup.php:972
 msgid "What uninstall method do you want to use?"
@@ -662,7 +662,7 @@ msgstr "在范围内显示Syslog"
 #: setup.php:1548
 #, fuzzy, php-format
 msgid "There were %s Device records removed from the Syslog database"
-msgstr "从Syslog数据库中删除了％s设备记录"
+msgstr "从Syslog数据库中删除了%s设备记录"
 
 #: setup.php:1564
 #, fuzzy
@@ -692,7 +692,7 @@ msgstr "所有文字"
 #: syslog.php:67
 #, fuzzy, php-format
 msgid "%d Chars"
-msgstr "％d Chars"
+msgstr "%d Chars"
 
 #: syslog.php:171
 msgid "System Logs"
@@ -810,7 +810,7 @@ msgstr "默认"
 #: syslog.php:1066
 #, php-format
 msgid " [ Start: '%s' to End: '%s', Unprocessed Messages: %s ]"
-msgstr "[开始：'％s'到结尾：'％s'，未处理的消息：％s]"
+msgstr "[开始：'%s'到结尾：'%s'，未处理的消息：%s]"
 
 #: syslog.php:1068
 #, php-format
@@ -839,7 +839,7 @@ msgstr "选择所有设备"
 #: syslog.php:1329
 #, fuzzy, php-format
 msgid "Syslog Message Filter %s"
-msgstr "系统日志消息过滤器％s"
+msgstr "系统日志消息过滤器%s"
 
 #: syslog.php:1336
 msgid "Timespan"
@@ -1160,7 +1160,7 @@ msgstr "1个月"
 #: syslog_alerts.php:449
 #, fuzzy, php-format
 msgid "Alert Edit [edit: %s]"
-msgstr "警报编辑[编辑：％s]"
+msgstr "警报编辑[编辑：%s]"
 
 #: syslog_alerts.php:451 syslog_alerts.php:458 syslog_alerts.php:465
 #, fuzzy
@@ -1424,7 +1424,7 @@ msgstr "导入的"
 #: syslog_alerts.php:1039
 #, fuzzy, php-format
 msgid "NOTE: Alert '%s' %s!"
-msgstr "注意：提醒'％s'％s！"
+msgstr "注意：提醒'%s'%s！"
 
 #: syslog_alerts.php:1039 syslog_removal.php:861 syslog_reports.php:903
 msgid "Updated"
@@ -1433,7 +1433,7 @@ msgstr "更新"
 #: syslog_alerts.php:1041
 #, fuzzy, php-format
 msgid "ERROR: Alert '%s' %s Failed!"
-msgstr "错误：警报'％s'％s失败！"
+msgstr "错误：警报'%s'%s失败！"
 
 #: syslog_alerts.php:1041 syslog_removal.php:863 syslog_reports.php:905
 msgid "Update"
@@ -1496,12 +1496,12 @@ msgstr "导出Syslog删除规则"
 #: syslog_removal.php:342
 #, fuzzy, php-format
 msgid "Rule '%s' resulted in %s/%s messages removed/transferred"
-msgstr "删除了％s消息，并传输了％s消息"
+msgstr "删除了%s消息，并传输了%s消息"
 
 #: syslog_removal.php:398
 #, fuzzy, php-format
 msgid "Removal Rule Edit [edit: %s]"
-msgstr "删除规则编辑[编辑：％s]"
+msgstr "删除规则编辑[编辑：%s]"
 
 #: syslog_removal.php:400 syslog_removal.php:407
 #, fuzzy
@@ -1626,12 +1626,12 @@ msgstr "导入删除规则"
 #: syslog_removal.php:861
 #, fuzzy, php-format
 msgid "NOTE: Removal Rule '%s' %s!"
-msgstr "注意：删除规则'％s'％s！"
+msgstr "注意：删除规则'%s'%s！"
 
 #: syslog_removal.php:863
 #, fuzzy, php-format
 msgid "ERROR: Removal Rule '%s' %s Failed!"
-msgstr "错误：删除规则'％s'％s失败！"
+msgstr "错误：删除规则'%s'%s失败！"
 
 #: syslog_reports.php:169
 #, fuzzy
@@ -1685,7 +1685,7 @@ msgstr "返回"
 #: syslog_reports.php:391
 #, fuzzy, php-format
 msgid "Report Edit [edit: %s]"
-msgstr "报告编辑[编辑：％s]"
+msgstr "报告编辑[编辑：%s]"
 
 #: syslog_reports.php:393 syslog_reports.php:398
 #, fuzzy
@@ -1800,9 +1800,9 @@ msgstr "导入报告数据"
 #: syslog_reports.php:903
 #, php-format
 msgid "NOTE: Report Rule '%s' %s!"
-msgstr "注意：报告规则"
+msgstr ""
 
 #: syslog_reports.php:905
 #, php-format
 msgid "ERROR: Report Rule '%s' %s Failed!"
-msgstr "错误：报告规则'％s'％s失败！"
+msgstr "错误：报告规则'%s'%s失败！"

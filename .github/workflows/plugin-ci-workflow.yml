@@ -1,5 +1,5 @@
 # +-------------------------------------------------------------------------+
-# | Copyright (C) 2004-2025 The Cacti Group                                 |
+# | Copyright (C) 2004-2026 The Cacti Group                                 |
 # |                                                                         |
 # | This program is free software; you can redistribute it and/or           |
 # | modify it under the terms of the GNU General Public License             |
@@ -32,7 +32,65 @@ on:
       - develop
 
 jobs:
+  quality-checks:
+    name: PHP Quality (Lint, Stan, CS)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Cacti
+      uses: actions/checkout@v4
+      with:
+        repository: Cacti/cacti
+        path: cacti
+    
+    - name: Checkout Syslog Plugin
+      uses: actions/checkout@v4
+      with:
+        path: cacti/plugins/syslog
+    
+    - name: Setup PHP 8.3
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+        extensions: intl, mysql, gd, ldap, gmp, xml, curl, json, mbstring
+        tools: php-cs-fixer, phpstan
+
+    - name: Check PHP Syntax (Lint)
+      run: |
+        cd cacti/plugins/syslog
+        if find . -name '*.php' -not -path './vendor/*' -exec php -l {} 2>&1 \; | grep -iv 'no syntax errors detected'; then
+          echo "Syntax errors found!"
+          exit 1
+        fi
+
+    - name: Run PHP CS Fixer (Dry Run)
+      run: |
+        cd cacti/plugins/syslog
+        php-cs-fixer fix --dry-run --diff --ansi --config=../../../.php-cs-fixer.php . || true
+
+    - name: Create PHPStan config
+      run: |
+        cd cacti/plugins/syslog
+        cat > phpstan.neon << 'EOF'
+        parameters:
+          level: 5
+          paths:
+            - .
+          excludePaths:
+            - vendor/
+            - locales/
+          ignoreErrors:
+            - '#has invalid return type the\.#'
+          bootstrapFiles:
+            - ../../include/global.php
+        EOF
+
+    - name: Run PHPStan Analysis
+      run: |
+        cd cacti/plugins/syslog
+        phpstan analyse --no-progress --error-format=github || true
+
   integration-test:
+    needs: quality-checks
     runs-on: ${{ matrix.os }}
     
     strategy:
@@ -81,7 +139,6 @@ jobs:
     - name: Check PHP version
       run: php -v
     
-    
     - name: Run apt-get update
       run: sudo apt-get update
     
@@ -104,7 +161,6 @@ jobs:
     - name: Create MySQL Config
       run: |
         echo -e "[client]\nuser = root\npassword = cactiroot\nhost = 127.0.0.1\n" > ~/.my.cnf
-        cat ~/.my.cnf
     
     - name: Initialize Cacti Database
       env:
@@ -148,7 +204,7 @@ jobs:
         sed -i "s/'cacti'/'cacti'/g" ${{ github.workspace }}/cacti/plugins/syslog/config.php
         sed -i "s/'cactiuser'/'cactiuser'/g" ${{ github.workspace }}/cacti/plugins/syslog/config.php
         sed -i 's/\/\/\$/\$/g' ${{ github.workspace }}/cacti/plugins/syslog/config.php
-        sudo chmod 664 ${{ github.workspace }}/cacti/plugins/syslog/config.php
+        sudo chmod 664 ${{ github.workspace }}/cacti/include/config.php
     
     - name: Configure Apache
       run: |
@@ -179,16 +235,7 @@ jobs:
       run: |
         cd ${{ github.workspace }}/cacti
         sudo php cli/plugin_manage.php --plugin=syslog --install --enable
-    
-    - name: Check PHP Syntax for Plugin
-      run: |
-        cd ${{ github.workspace }}/cacti/plugins/syslog
-        if find . -name '*.php' -exec php -l {} 2>&1 \; | grep -iv 'no syntax errors detected'; then
-          echo "Syntax errors found!"
-          exit 1
-        fi
-    
-    
+
     - name: Run Cacti Poller
       run: |
         cd ${{ github.workspace }}/cacti
@@ -205,7 +252,6 @@ jobs:
         cd ${{ github.workspace }}/cacti/plugins/syslog/.github/workflows
         sudo ./populate_syslog_incoming.sh
 
-
     - name: force Syslog Plugin Poller
       run: |
         cd ${{ github.workspace }}/cacti
@@ -215,7 +261,6 @@ jobs:
           cat log/cacti.log
           exit 1
         fi
-
     
     - name: View Cacti Logs
       if: always()
@@ -224,38 +269,3 @@ jobs:
           echo "=== Cacti Log ==="
           sudo cat ${{ github.workspace }}/cacti/log/cacti.log
         fi
-
-
-    - name: Create PHPStan config
-      run: |
-        cd ${{ github.workspace }}/cacti/plugins/syslog
-        cat > phpstan.neon << 'EOF'
-        parameters:
-          level: 5
-          paths:
-            - .
-          excludePaths:
-            - vendor/
-            - locales/
-          ignoreErrors:
-            - '#has invalid return type the\.#'
-          bootstrapFiles:
-            - ../../include/global.php
-        EOF
-    
-    - name: Install PHPStan
-      run: |
-        cd ${{ github.workspace }}/cacti/plugins/syslog
-        composer require --dev phpstan/phpstan --with-all-dependencies || composer global require phpstan/phpstan
-    
-    - name: Run PHPStan Analysis
-      run: |
-        cd ${{ github.workspace }}/cacti/plugins/syslog
-        if [ -f vendor/bin/phpstan ]; then
-          vendor/bin/phpstan analyse --no-progress --error-format=github || true
-        else
-          phpstan analyse --no-progress --error-format=github || true
-        fi
-      continue-on-error: true
-
-

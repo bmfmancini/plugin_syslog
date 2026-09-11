@@ -73,9 +73,8 @@ function applyTimespan() {
  */
 function applyFilter() {
 	var strURL  = 'syslog.php?tab='+(window.pageTab || '');
+
 	strURL += '&header=false';
-	strURL += '&date1='+$('#date1').val();
-	strURL += '&date2='+$('#date2').val();
 	strURL += '&host='+$('#host').val();
 	strURL += '&rfilter='+base64_encode($('#rfilter').val());
 	strURL += '&efacility='+$('#efacility').val();
@@ -86,6 +85,10 @@ function applyFilter() {
 	strURL += '&removal='+$('#removal').val();
 	strURL += '&refresh='+$('#refresh').val();
 	strURL += '&grouping=' + ($('#grouping').length ? $('#grouping').val() : '0');
+	strURL += '&predefined_timespan='+$('#predefined_timespan').val();
+	strURL += '&date1='+$('#date1').val();
+	strURL += '&date2='+$('#date2').val();
+
 	loadPageNoHeader(strURL);
 }
 
@@ -167,6 +170,8 @@ function initSyslogMain(config) {
 	var pageTab   = config.pageTab || '';
 	var hostTerm  = '';
 	var placeHolder = config.placeHolder || '';
+	var origDate1 = $('#date1').val();
+	var origDate2 = $('#date2').val();
 
 	// Make pageTab global for other functions
 	window.pageTab = pageTab;
@@ -220,7 +225,7 @@ function initSyslogMain(config) {
 
 							$.each(data, function(index, hostData) {
 								if ($('#host option[value="'+index+'"]').length == 0) {
-									$('#host').append('<option class="'+hostData.class+'" value="'+index+'">'+hostData.host+'</option>');
+									$('#host').append('<option class="'+DOMPurify.sanitize(hostData.class)+'" value="'+DOMPurify.sanitize(index)+'">'+DOMPurify.sanitize(hostData.host)+'</option>');
 								}
 							});
 
@@ -315,9 +320,13 @@ function initSyslogMain(config) {
 			stepMinute: 1,
 			showAnim: 'slideDown',
 			numberOfMonths: 1,
-			timeFormat: 'HH:mm',
+			timeFormat: 'HH:mm:ss',
 			dateFormat: 'yy-mm-dd',
 			showButtonPanel: false
+		}).on('change', function() {
+			if ($('#date1').val() != origDate1) {
+				$('#predefined_timespan').val(0).selectmenu('refresh');
+			}
 		});
 
 		$('#date2').datetimepicker({
@@ -325,10 +334,14 @@ function initSyslogMain(config) {
 			stepMinute: 1,
 			showAnim: 'slideDown',
 			numberOfMonths: 1,
-			timeFormat: 'HH:mm',
+			timeFormat: 'HH:mm:ss',
 			dateFormat: 'yy-mm-dd',
 			showButtonPanel: false
-		});
+		}).on('change', function() {
+			if ($('#date2').val() != origDate2) {
+				$('#predefined_timespan').val(0).selectmenu('refresh');
+			}
+		});;
 	});
 }
 
@@ -567,6 +580,18 @@ function initSyslogReports() {
  * Autocomplete Form Callback Functions
  * ======================================================================== */
 
+function syslogExecuteFunctionByName(functionName, context /*, args */) {
+	var args       = Array.prototype.slice.call(arguments, 2);
+	var namespaces = functionName.split('.');
+	var func       = namespaces.pop();
+
+	for(var i = 0; i < namespaces.length; i++) {
+		context = context[namespaces[i]];
+	}
+
+	return context[func].apply(context, args);
+}
+
 /**
  * Initialize autocomplete for form dropdown fields
  * @param {string} formName - The name of the form field
@@ -577,7 +602,7 @@ function initSyslogAutocomplete(formName, callback, onChange) {
 	var formNameTimer;
 	var formNameClickTimer;
 	var formNameOpen = false;
-	
+
 	$(function() {
 		$('#' + formName + '_input').autocomplete({
 			source: window.location.pathname + '?action=' + callback,
@@ -585,13 +610,19 @@ function initSyslogAutocomplete(formName, callback, onChange) {
 			minLength: 0,
 			select: function(event, ui) {
 				$('#' + formName + '_input').val(ui.item.label);
+
 				if (ui.item.id) {
 					$('#' + formName).val(ui.item.id);
 				} else {
 					$('#' + formName).val(ui.item.value);
 				}
+
 				if (onChange) {
-					eval(onChange);
+					$(this).autocomplete('close');
+
+					onChange = onChange.replace('(', '').replace(')', '');
+
+					syslogExecuteFunctionByName(onChange, window);
 				}
 			}
 		}).css('border', 'none').css('background-color', 'transparent');
@@ -614,8 +645,8 @@ function initSyslogAutocomplete(formName, callback, onChange) {
 				}, 200);
 			}
 		}).on('mouseleave', function() {
-			formNameTimer = setTimeout(function() { 
-				$('#' + formName + '_input').autocomplete('close'); 
+			formNameTimer = setTimeout(function() {
+				$('#' + formName + '_input').autocomplete('close');
 			}, 800);
 		});
 
@@ -630,8 +661,8 @@ function initSyslogAutocomplete(formName, callback, onChange) {
 		$('ul[id^="ui-id"]').on('mouseenter', function() {
 			clearTimeout(formNameTimer);
 		}).on('mouseleave', function() {
-			formNameTimer = setTimeout(function() { 
-				$('#' + formName + '_input').autocomplete('close'); 
+			formNameTimer = setTimeout(function() {
+				$('#' + formName + '_input').autocomplete('close');
 			}, 800);
 		});
 

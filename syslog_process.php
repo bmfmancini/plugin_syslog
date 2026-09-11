@@ -1,7 +1,7 @@
 <?php
 /*
  +-------------------------------------------------------------------------+
- | Copyright (C) 2004-2025 The Cacti Group                                 |
+ | Copyright (C) 2004-2026 The Cacti Group                                 |
  |                                                                         |
  | This program is free software; you can redistribute it and/or           |
  | modify it under the terms of the GNU General Public License             |
@@ -22,9 +22,15 @@
  +-------------------------------------------------------------------------+
 */
 
-include(dirname(__FILE__) . '/../../include/cli_check.php');
-include_once(dirname(__FILE__) . '/functions.php');
-include_once(dirname(__FILE__) . '/database.php');
+if (function_exists('pcntl_async_signals')) {
+	pcntl_async_signals(true);
+} else {
+	declare(ticks = 100);
+}
+
+include(__DIR__ . '/../../include/cli_check.php');
+include_once(__DIR__ . '/functions.php');
+include_once(__DIR__ . '/database.php');
 
 syslog_connect();
 
@@ -32,24 +38,28 @@ syslog_connect();
  * Let it run for an hour if it has to, to clear up any big
  * bursts of incoming syslog events
  */
+ini_set('output_buffering', 'Off');
 ini_set('max_execution_time', 3600);
 ini_set('memory_limit', '-1');
+
+set_time_limit(3600);
+ob_implicit_flush();
 
 global $debug, $syslog_facilities, $syslog_levels;
 
 $debug  = false;
 $forcer = false;
 
-/* process calling arguments */
+// process calling arguments
 $parms = $_SERVER['argv'];
 array_shift($parms);
 
 if (cacti_sizeof($parms)) {
-	foreach($parms as $parameter) {
+	foreach ($parms as $parameter) {
 		if (strpos($parameter, '=')) {
-			list($arg, $value) = explode('=', $parameter);
+			[$arg, $value] = explode('=', $parameter);
 		} else {
-			$arg = $parameter;
+			$arg   = $parameter;
 			$value = '';
 		}
 
@@ -82,7 +92,13 @@ if (cacti_sizeof($parms)) {
 	}
 }
 
-/* record the start time */
+// install signal handlers for UNIX only
+if (function_exists('pcntl_signal')) {
+	pcntl_signal(SIGTERM, 'sig_handler');
+	pcntl_signal(SIGINT, 'sig_handler');
+}
+
+// record the start time
 $start_time = microtime(true);
 
 /**
@@ -116,7 +132,7 @@ if ($config['poller_id'] > 1) {
 		exit(1);
 	}
 
-	/* replicate in syslog tables sync is enabled */
+	// replicate in syslog tables sync is enabled
 	syslog_replicate_in();
 }
 
@@ -125,7 +141,7 @@ if ($config['poller_id'] > 1) {
  * running exit until such time as the syslog process times out.
  */
 if (!register_process_start('syslog', 'master', $config['poller_id'], 1200)) {
-    exit(0);
+	exit(0);
 }
 
 /**
@@ -141,6 +157,7 @@ syslog_init_variables();
  * performing syslog database.
  */
 syslog_debug('-------------------------------------------------------------------------------------');
+
 if (!syslog_is_partitioned()) {
 	syslog_debug('Syslog Table is NOT Partitioned');
 	$deleted = syslog_traditional_manage();
@@ -151,13 +168,13 @@ if (!syslog_is_partitioned()) {
 syslog_debug('-------------------------------------------------------------------------------------');
 
 /**
- * pre-processing includes marking a uniqueID to be used
+ * pre-processing includes marking a max_seq to be used
  * in the processesing of alerts and stripping domains
  * from hostnames in the case that the administrator
  * chooses to strip them.
  */
 $results  = syslog_preprocess_incoming_records();
-$uniqueID = $results['uniqueID'];
+$max_seq  = $results['max_seq'];
 $incoming = $results['incoming'];
 
 /**
@@ -173,7 +190,7 @@ $incoming = $results['incoming'];
  * time and to speed up searching for these various
  * columns in the database.
  */
-syslog_update_reference_tables($uniqueID);
+syslog_update_reference_tables($max_seq);
 
 /**
  * The statistics process allows the Cacti
@@ -181,19 +198,19 @@ syslog_update_reference_tables($uniqueID);
  * into the syslog table and what message types are flowing
  * into it.
  */
-syslog_update_statistics($uniqueID);
+syslog_update_statistics($max_seq);
 
 /**
  * remove records that don't need to to be transferred
  */
-$results = syslog_remove_items('syslog_incoming', $uniqueID);
+$results = syslog_remove_items('syslog_incoming', $max_seq);
 $removed = $results['removed'];
 $xferred = $results['xferred'];
 
 /**
  * process the syslog rules and generate alerts
  */
-$results = syslog_process_alerts($uniqueID);
+$results = syslog_process_alerts($max_seq);
 $alerts  = $results['syslog_alerts'];
 $alarms  = $results['syslog_alarms'];
 
@@ -209,7 +226,7 @@ api_plugin_hook('plugin_syslog_after_processing');
  * move records from incoming to syslog table and remove
  * any stale records to to a poller crash
  */
-$results = syslog_incoming_to_syslog($uniqueID);
+$results = syslog_incoming_to_syslog($max_seq);
 $moved   = $results['moved'];
 $stale   = $results['stale'];
 
@@ -242,6 +259,31 @@ unregister_process('syslog', 'master', $config['poller_id']);
 exit(0);
 
 /**
+ * sig_handler - handles UNIX signals and logs shutdown events to the Cacti log.
+ *
+ * @param int $signo The signal received by the process.
+ *
+ * @return (void)
+ */
+function sig_handler($signo) {
+	global $config;
+
+	switch ($signo) {
+		case SIGTERM:
+		case SIGINT:
+			cacti_log("WARNING: Syslog 'master' is shutting down by signal!", false, 'SYSLOG');
+
+			unregister_process('syslog', 'master', $config['poller_id']);
+
+			exit(1);
+
+			break;
+		default:
+			// ignore all other signals
+	}
+}
+
+/**
  * display_version - displays version information
  *
  * @return (void)
@@ -271,4 +313,3 @@ function display_help() {
 	print '    --force-report   Send email reports now.' . PHP_EOL;
 	print '    --debug          Provide more verbose debug output.' . PHP_EOL . PHP_EOL;
 }
-

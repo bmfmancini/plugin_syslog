@@ -164,21 +164,24 @@ function initSyslogSearchBuilder() {
 	function render(container, rows) {
 		container.replaceChildren();
 		rows.forEach(function(row, index) {
-			var line = element('div', 'syslogSearchRow');
+			var line = element('div', 'syslogSearchRow' + (row.rows ? ' syslogSearchGroupRow' : ''));
+			var connector = element('div', 'syslogSearchConnector');
 			if (index) {
-				line.appendChild(select([['AND', 'AND'], ['OR', 'OR']], row.join, 'AND / OR', function(value) { row.join = value; }));
+				connector.appendChild(select([['AND', 'AND'], ['OR', 'OR']], row.join, 'AND / OR', function(value) { row.join = value; }));
 			}
+			line.appendChild(connector);
 			if (row.rows) {
 				line.appendChild(select([['0', labels.match], ['1', labels.exclude]], row.negative ? '1' : '0', labels.message, function(value) { row.negative = value === '1'; }));
 				var group = element('div', 'syslogSearchGroup');
 				render(group, row.rows);
 				line.appendChild(group);
 			} else {
-				line.appendChild(element('span', '', labels.message));
+				line.appendChild(element('span', 'syslogSearchField', labels.message));
 				line.appendChild(select([['0', labels.contains], ['1', labels.notContains]], row.negative ? '1' : '0', labels.message, function(value) { row.negative = value === '1'; }));
 				var input = element('input', 'syslogSearchText');
 				input.type = 'text';
 				input.size = 35;
+				input.placeholder = labels.message;
 				input.required = true;
 				input.value = row.value;
 				input.setAttribute('aria-label', labels.message);

@@ -118,25 +118,3 @@ p {
 	/* Slightly highlight on hover but keep parent coloring visible */
 	background: rgba(0,0,0,0.02) !important;
 }
-
-#syslog_search_builder {
-	margin-top: 0.4em;
-}
-
-.syslogSearchRow, .syslogSearchActions {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 0.4em;
-	margin-bottom: 0.4em;
-}
-
-.syslogSearchGroup {
-	border-left: 2px solid currentColor;
-	padding-left: 0.75em;
-}
-
-#logical_search_help {
-	max-width: 42em;
-	font-size: 0.9em;
-}

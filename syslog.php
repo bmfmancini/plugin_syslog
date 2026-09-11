@@ -1232,7 +1232,7 @@ function syslog_filter($sql_where, $tab) {
 	$graph_timespans[GT_CUSTOM] = __('Custom', 'syslog');
 
 	html_start_box(__('Syslog Message Filter %s', $filter_text, 'syslog'), '100%', '', '3', 'center', ''); ?>
-		<tr class='even noprint'>
+		<tr class='noprint syslogFilterRow'>
 			<td class='noprint'>
 			<form id='syslog_form' action='syslog.php'>
 				<table class='filterTable'>
@@ -1326,7 +1326,7 @@ function syslog_filter($sql_where, $tab) {
 						</td>
 					</tr>
 				</table>
-				<table class='filterTable'>
+				<table class='filterTable syslogSearchTable'>
 					<tr>
 						<td>
 							<?php print __('Search', 'syslog'); ?>
@@ -1346,9 +1346,13 @@ function syslog_filter($sql_where, $tab) {
 								data-match='<?php print __esc('Match group', 'syslog'); ?>'
 								data-exclude='<?php print __esc('Exclude group', 'syslog'); ?>'>
 							</div>
-							<div id='logical_search_help'><?php print __esc('Enter message text, then use AND, OR, or NOT to add another condition. AND conditions are matched together; OR adds an alternative.', 'syslog'); ?></div>
+							<details id='logical_search_help'><summary><?php print __esc('Search help', 'syslog'); ?></summary><?php print __esc('Enter message text, then use AND, OR, or NOT to add another condition. AND conditions are matched together; OR adds an alternative.', 'syslog'); ?></details>
 							<div id='logical_search_error' role='alert'><?php print html_escape($GLOBALS['syslog_search_error'] ?? ''); ?></div>
 						</td>
+					</tr>
+				</table>
+				<table class='filterTable'>
+					<tr>
 						<td>
 							<?php print __('Devices', 'syslog'); ?>
 						</td>

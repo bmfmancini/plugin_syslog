@@ -209,28 +209,38 @@ stable and robust versions of syslog ever published. We are always looking for
 new ideas. So, this won't be the last release of syslog, you can rest assured of
 that.
 
-## Logical message searches
+## Building a message search
 
-In the message viewer or triggered-alert message view, select **Logical** beside
-Search. Use **AND**, **OR**, and **NOT** to combine literal message text:
+The message viewer and triggered-alert message view provide a **Build search**
+mode. Enter the first message text, then click **AND**, **OR**, or **NOT** to add
+another condition on its own row. For example:
 
-* `(error OR warning) AND NOT timeout`
-* `connection refused OR permission denied`
-* `"AND" AND NOT "(ignored)"`
+```text
+    Message contains          message A
+AND Message contains          message B
+OR  Message contains          Message C
+```
 
-Operators must be uppercase and standalone. NOT binds before AND, then OR;
-parentheses override that order. Text between operators matches a literal phrase,
-including spaces. Double quotes let you search for literal operators or
-parentheses. Inside quotes, use `\"` for a quote and `\\` for a backslash.
-Wildcards such as `%` and `_`, and regex characters, are ordinary text in Logical
-mode. Case sensitivity follows the database column's collation.
+This finds messages containing both A and B, or messages containing C. AND
+conditions are matched together before OR alternatives. NOT adds an AND condition
+with **does not contain** selected. Each row lets you change its AND/OR connector,
+switch between **contains** and **does not contain**, or remove it with **×**.
+Press Enter or Go to run the assembled search. Adding or editing rows does not
+submit the search automatically.
 
-The operator buttons insert at the cursor. Press Enter or Go to search. Invalid
-expressions display an error and return no results; CSV export rejects them too.
-Search mode and text are retained per message tab, including pagination, refresh,
-and export. Clear restores Regex mode and an empty search. Existing regular
-expression searches remain available in **Regex**, the default mode. Logical
-searches allow up to 8192 bytes, 256 tokens, and 32 nesting levels.
+Each text box matches a literal substring, including spaces, quotes, operator
+words, `%`, `_`, and regex characters. There is no query syntax to type or escape.
+Case sensitivity follows the database column's collation. A single empty row
+clears the message restriction; additional rows must contain text before searching
+or exporting. Previously saved parenthesized logical searches retain their groups
+when displayed in the builder.
+
+The assembled search is retained per message tab through pagination, refresh,
+grouping, and CSV export. **Clear** restores an empty builder. **Regex** mode is
+still available, and existing searches saved before the builder retain their
+regex behavior. New sessions default to the builder. Searches allow up to 8192
+bytes of generated expression, 256 tokens, and 32 nesting levels. Invalid searches
+return no results and CSV export rejects them.
 
 -----------------------------------------------
 Copyright (c) 2004-2026 - The Cacti Group, Inc.

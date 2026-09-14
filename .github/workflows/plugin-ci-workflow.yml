@@ -40,14 +40,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Cacti
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: Cacti/cacti
         ref: ${{ env.CACTI }}
         path: cacti
     
     - name: Checkout Syslog Plugin
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         path: cacti/plugins/syslog
     
@@ -65,6 +65,13 @@ jobs:
           echo "Syntax errors found!"
           exit 1
         fi
+
+    - name: Run Regression Tests
+      run: |
+        cd cacti/plugins/syslog
+        for test in tests/regression/*.php; do
+          php "$test"
+        done
 
     - name: Run PHP CS Fixer (Dry Run)
       run: |
@@ -123,14 +130,14 @@ jobs:
 
     steps:
     - name: Checkout Cacti
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: Cacti/cacti
         ref: ${{ env.CACTI }}
         path: cacti
     
     - name: Checkout Syslog Plugin
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         path: cacti/plugins/syslog
     

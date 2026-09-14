@@ -1,37 +1,4 @@
 <?php
-
-/**
- * Prefix values that spreadsheet applications could interpret as formulas.
- * Non-string values are returned unchanged for callers that preserve types.
- *
- * Only literal spaces are stripped before the check; a leading tab or CR is
- * itself a formula trigger in some importers and must stay detectable as
- * the first character rather than being treated as skippable whitespace.
- *
- * @param mixed $value Value destined for CSV output.
- * @return mixed Sanitized CSV value.
- */
-function syslog_csv_safe(mixed $value): mixed {
-	if (!is_string($value) || $value === '') {
-		return $value;
-	}
-
-	if (str_starts_with($value, "'")) {
-		return $value;
-	}
-
-	$stripped = ltrim($value, ' ');
-
-	if ($stripped === '') {
-		return $value;
-	}
-
-	if (preg_match('/^[=+\-@\t\r]/', $stripped) === 1) {
-		return "'" . $value;
-	}
-
-	return $value;
-}
 /*
  +-------------------------------------------------------------------------+
  | Copyright (C) 2004-2026 The Cacti Group                                 |
@@ -495,12 +462,6 @@ function syslog_get_import_xml_payload($redirect_url) {
 
 	if (trim($import_text) !== '') {
 		// textbox input
-		if (strlen($import_text) > SYSLOG_IMPORT_MAX_BYTES) {
-			cacti_log('SYSLOG ERROR: Text import payload exceeds the maximum size', false, 'SYSTEM');
-			header('Location: ' . $redirect_url);
-			exit;
-		}
-
 		return $import_text;
 	}
 
@@ -520,27 +481,10 @@ function syslog_get_import_xml_payload($redirect_url) {
 			exit;
 		}
 
-		$size = (int) ($_FILES['import_file']['size'] ?? filesize($tmp_name));
-
-		if ($size <= 0 || $size > SYSLOG_IMPORT_MAX_BYTES) {
-			cacti_log('SYSLOG ERROR: Uploaded import file has an invalid size', false, 'SYSTEM');
-			header('Location: ' . $redirect_url);
-			exit;
-		}
-
-		$fp = fopen($tmp_name, 'rb');
-
-		if ($fp === false) {
-			cacti_log('SYSLOG ERROR: Failed to open uploaded import file', false, 'SYSTEM');
-			header('Location: ' . $redirect_url);
-			exit;
-		}
-
-		$xml_data = fread($fp, $size);
-		fclose($fp);
+		$xml_data = syslog_read_import_file($tmp_name);
 
 		if ($xml_data === false) {
-			cacti_log('SYSLOG ERROR: Failed to read uploaded import file', false, 'SYSTEM');
+			cacti_log('SYSLOG ERROR: Uploaded import file is empty or unreadable', false, 'SYSTEM');
 			header('Location: ' . $redirect_url);
 			exit;
 		}
@@ -552,20 +496,24 @@ function syslog_get_import_xml_payload($redirect_url) {
 	exit;
 }
 
-function syslog_csv_cell(mixed $value): string {
-	$value = (string) $value;
+function syslog_read_import_file(string $filename): string|false {
+	$size = filesize($filename);
 
-	if ($value === '' || str_starts_with($value, "'")) {
-		return $value;
+	if ($size === false || $size < 1) {
+		return false;
 	}
 
-	$trimmed = ltrim($value, ' ');
+	$handle = fopen($filename, 'rb');
 
-	if ($trimmed !== '' && in_array($trimmed[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
-		return "'" . $value;
+	if ($handle === false) {
+		return false;
 	}
 
-	return $value;
+	try {
+		return fread($handle, $size);
+	} finally {
+		fclose($handle);
+	}
 }
 
 function syslog_is_partitioned() {
@@ -1268,32 +1216,32 @@ function sql_hosts_where($tab) {
 }
 
 /**
- * Defuse CSV formula injection without mutating content.
+ * Prefix values that spreadsheet applications could interpret as formulas.
+ * Non-string values are returned unchanged for callers that preserve types.
  *
- * Spreadsheet applications (Excel, LibreOffice, Google Sheets) interpret any
- * cell starting with =, +, -, @, TAB, or CR as a formula. Prepending a
- * single quote tells them to treat the cell as literal text. The quote is
- * visible in the cell but does not alter the underlying data, unlike
- * trimming which loses characters.
+ * Only literal spaces are stripped before the check; a leading tab or CR is
+ * itself a formula trigger in some importers and must stay detectable as
+ * the first character rather than being treated as skippable whitespace.
  *
- * See OWASP CSV Injection Prevention Cheat Sheet.
+ * @param mixed $value Value destined for CSV output.
+ * @return mixed Sanitized CSV value.
  */
 function syslog_csv_safe(mixed $value): mixed {
 	if (!is_string($value) || $value === '') {
 		return $value;
 	}
 
-	// Some CSV importers strip leading spaces before parsing as a
-	// formula, so " =SUM(A1)" is still dangerous. Only strip literal
-	// spaces here; tabs and carriage returns are themselves triggers
-	// and must remain detectable as the first character.
+	if (str_starts_with($value, "'")) {
+		return $value;
+	}
+
 	$stripped = ltrim($value, ' ');
 
 	if ($stripped === '') {
 		return $value;
 	}
 
-	if (in_array($stripped[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+	if (preg_match('/^[=+\-@\t\r]/', $stripped) === 1) {
 		return "'" . $value;
 	}
 
@@ -1427,7 +1375,7 @@ function syslog_export($tab) {
 					syslog_csv_safe(ucfirst($message['facility'])),
 					syslog_csv_safe(ucfirst($message['priority'])),
 					$message['count']
-				]);
+				];
 
 				fputcsv($fp, $line, ',', '"', '');
 			}

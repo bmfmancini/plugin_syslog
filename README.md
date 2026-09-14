@@ -56,6 +56,13 @@ However, in Syslog Version 4, if you want an alert per Host, you will have to
 move your Alerts from the `System Level` to the `Host Level` as `System Level`
 Alerts will generate one command execution for all matching messages.
 
+
+## Important note on Syslog Statistics
+
+As of Version 5.0 the syslog statistics table is not longer in use 
+The data will be retained in the database however syslog will not longer use or update that table
+
+
 ## Installation
 
 To install the syslog plugin, simply copy the plugin_syslog directory to Cacti's

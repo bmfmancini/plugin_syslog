@@ -4,8 +4,8 @@ $root      = dirname(__DIR__, 2);
 $functions = file_get_contents($root . '/functions.php');
 $setup     = file_get_contents($root . '/setup.php');
 
-if (!preg_match('/function\s+syslog_json_safe\s*\(/', $functions)) {
-	throw new RuntimeException('Alarm editor JSON helper must be available from functions.php.');
+if (preg_match_all('/function\s+syslog_json_safe\s*\(/', $functions) !== 1) {
+	throw new RuntimeException('Alarm editor JSON helper must be declared exactly once in functions.php.');
 }
 
 if (!str_contains($setup, 'ALTER TABLE syslog_alert MODIFY column message TEXT NOT NULL')) {
